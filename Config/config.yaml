@@ -1,0 +1,463 @@
+profile: TV                     # String value TV or STB
+hal version: 1.0.0              # String value
+components:                     # Array of components
+  - name: IAudioDecoderManager  # Component object begins
+    interfaceVersion: 2         # Integer value
+    IAudioDecoder:              # Resource list
+      - id: 42                   # Resource object begins
+        supportedCodecs:        # Array of codec capabilities
+          - HE_AAC
+          - PCM
+        supportsSecure: false
+      - id: 39                   # Resource object begins
+        supportedCodecs:        # Array of codec capabilities
+          - AAC_LC
+          - HE_AAC
+          - DTS
+          - HE_AAC2
+          - DOLBY_AC3
+          - DOLBY_AC3_PLUS
+          - DOLBY_AC3_PLUS_JOC
+          - DOLBY_AC4
+          - X_HE_AAC
+        supportsSecure: true
+  - name: IAudioSinkManager     # Component object begins
+    interfaceVersion: 1         # Integer value
+    platformCapabilities:
+      - supportsLowLatency: false
+        systemMixerSampleRateHz: 48000
+        systemMixerPCMFormat: S32BE
+        supportsPlanarFormat: false
+    IAudioSink:                 # Resource list
+      - id: 64                   # Resource object begins
+      - id: 65
+  - name: IVideoDecoderManager  # Component object begins
+    interfaceVersion: 1         # Integer value
+    supportedOperationalModes:
+      - NON_TUNNELLED
+      - TUNNELLED
+      - NON_TUNNELLED
+    IVideoDecoder:              # Resource list
+      - id: 22                   # Resource object begins
+        supportedCodecs:        # Array of codec capabilities
+          - codec: MPEG
+            maxFrameRate: 60
+            maxFrameWidth: 1920
+            maxFrameHeight: 1080
+          - codec: H264
+            maxFrameRate: 60
+            maxFrameWidth: 1920
+            maxFrameHeight: 1080
+          - codec: H265
+            maxFrameRate: 60
+            maxFrameWidth: 3840
+            maxFrameHeight: 2160
+          - codec: VP9
+            maxFrameRate: 60
+            maxFrameWidth: 3840
+            maxFrameHeight: 2160
+          - codec: AV1
+            maxFrameRate: 60
+            maxFrameWidth: 3840
+            maxFrameHeight: 2160
+        supportedDynamicRanges:
+          - SDR
+          - DOLBY_VISION
+          - HLG
+        supportsSecure: true
+      - id: 33
+        supportedCodecs:        # Array of codec capabilities
+          - codec: MPEG
+            maxFrameRate: 30
+            maxFrameWidth: 1920
+            maxFrameHeight: 1080
+          - codec: H264
+            maxFrameRate: 30
+            maxFrameWidth: 1920
+            maxFrameHeight: 1080
+          - codec: H265
+            maxFrameRate: 30
+            maxFrameWidth: 1920
+            maxFrameHeight: 1080
+          - codec: VP9
+            maxFrameRate: 30
+            maxFrameWidth: 1920
+            maxFrameHeight: 1080
+          - codec: AV1
+            maxFrameRate: 30
+            maxFrameWidth: 1920
+            maxFrameHeight: 1080
+        supportedDynamicRanges:
+          - SDR
+        supportsSecure: true
+  - name: IVideoSinkManager     # Component object begins
+    interfaceVersion: 1         # Integer value
+    IVideoSink:                 # Resource list
+      - id: 0                   # Resource object begins
+      - id: 1
+      - id: 2
+      - id: 3
+  - name: IAVBuffer
+    interfaceVersion: 1         # Integer value
+    non-secure heap bytes: 16000000   # Replace 'NN' with actual values
+    secure heap bytes: 18000000       # Replace 'NN' with actual values
+  - name: IAVClockManager       # Component object begins
+    interfaceVersion: 1         # Integer value
+    IAVClock:                   # Resource list
+      - id: 8                   # Resource object begins
+      - id: 9                   # Resource object begins
+  - name: IPlaneControl        # Component object begins
+    interfaceVersion: 1         # Integer value
+    planes:                     # Resource list
+      - id: 10                   # Resource object begins
+        type: VIDEO
+        pixelFormats:
+          - NATIVE
+        maxWidth: 3840
+        maxHeight: 2160
+        frameWidth: 3840
+        frameHeight: 2160
+        supportedDynamicRanges:
+          - SDR
+          - HLG
+          - HDR10
+          - HDR10PLUS
+          - DOLBY_VISION
+        colorDepth: 12
+        maxFrameRate: 60
+        supportsAlpha: true
+        supportsZOrder: true
+        vsyncDisplayLatency: 3
+      - id: 20                   # Resource object begins
+        type: VIDEO
+        pixelFormats:
+          - NATIVE
+          - RGB
+          - YCBCR420
+        maxWidth: 3840
+        maxHeight: 2160
+        frameWidth: 3840
+        frameHeight: 2160
+        supportedDynamicRanges:
+          - SDR
+        colorDepth: 10
+        maxFrameRate: 60
+        supportsAlpha: true
+        supportsZOrder: true
+        vsyncDisplayLatency: 3
+      - id: 30                  # Resource object begins
+        type: VIDEO
+        pixelFormats:
+          - RGB
+        maxWidth: 1920
+        maxHeight: 1080
+        frameWidth: 1920
+        frameHeight: 1080
+        supportedDynamicRanges:
+          - SDR
+        colorDepth: 8
+        maxFrameRate: 60
+        supportsAlpha: true
+        supportsZOrder: false
+        vsyncDisplayLatency: 1
+  - name: cdm
+    resources:
+      - name: PlayReady
+        version: 4.4            # String value
+      - name: Widevine
+        version: 16.0.0
+      - name: Fairplay
+        version: 3.0
+  - name: IBoot                 # Component object begins
+    interfaceVersion: 1         # Integer value
+    supportedBootReasons:
+      - WATCHDOG
+      - SOFTWARE_RESET
+      - THERMAL_RESET
+      - WARM_RESET
+      - COLD_BOOT
+      - STR_AUTH_FAILURE
+    supportedResetTypes:
+      - FULL_SYSTEM_RESET
+  - name: IBroadcastManager     # Component object begins
+    interfaceVersion: 1         # Integer value
+  - name: IHdmiCec              # Component object begins
+    interfaceVersion: 1         # Integer value
+    HAL_CEC_VERSION: 0x06
+  - name: IDeepSleep            # Component object begins
+    interfaceVersion: 1         # Integer value
+    supportedTriggers:
+      - RCU_IR
+      - RCU_BT
+      - LAN
+      - WLAN
+      - TIMER
+      - FRONT_PANEL
+      - CEC
+      - PRESENCE
+      - VOICE
+    mandatoryTriggers:
+      - RCU_IR
+      - RCU_BT
+      - TIMER
+      - FRONT_PANEL
+  - name: IIndicator            # Component object begins
+    interfaceVersion: 1         # Integer value
+    supportedStates:
+      - BOOT
+      - ACTIVE
+      - STANDBY
+      - OFF
+      - WPS_CONNECTING
+      - WPS_CONNECTED
+      - WPS_ERROR
+      - FULL_SYSTEM_RESET
+      - USB_UPGRADE
+      - SOFTWARE_DOWNLOAD_ERROR
+  - name: IPanelOutput          # Component object begins
+    interfaceVersion: 1         # Integer value
+    panelType:
+    frameRateMatchingSupported: true
+    fadeDisplaySupported: true
+    supportedPQParameters:
+      - BRIGHTNESS
+      - CONTRAST
+      - SHARPNESS
+      - SATURATION
+      - HUE
+      - MANUAL_BACKLIGHT
+      - GAMMA
+      - COLOR_TEMPERATURE
+      - DIMMING_MODE
+      - DIMMING_LEVEL
+      - LOW_LATENCY_STATE
+      - SATURATION_RED
+      - SATURATION_BLUE
+      - SATURATION_GREEN
+      - SATURATION_YELLOW
+      - SATURATION_CYAN
+      - SATURATION_MAGENTA
+      - HUE_RED
+      - HUE_BLUE
+      - HUE_GREEN
+      - HUE_YELLOW
+      - HUE_CYAN
+      - HUE_MAGENTA
+      - LUMA_RED
+      - LUMA_BLUE
+      - LUMA_GREEN
+      - LUMA_YELLOW
+      - LUMA_CYAN
+      - LUMA_MAGENTA
+      - MEMC
+      - DYNAMIC_CONTRAST_LEVEL
+      - LOCAL_CONTRAST_LEVEL
+      - LOCAL_DIMMING_ZONES_X
+      - LOCAL_DIMMING_ZONES_Y
+      - AI_PQ_ENGINE
+      - AMBIENT_LIGHT_SENSOR_CONTROL
+    supportedRefreshRatesHz:
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
+      - 60
+    pictureModeCapabilities:
+      - pictureMode: Entertainment
+        videoFormatCapabilities:
+          - videoFormat: SDR
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+              - COMPOSITE_1
+          - videoFormat: HLG
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+          - videoFormat: HDR10
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+          - videoFormat: DOLBY_VISION
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+      - pictureMode: Dynamic
+        videoFormatCapabilities:
+          - videoFormat: SDR
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+              - COMPOSITE_1
+          - videoFormat: HLG
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+          - videoFormat: HDR10
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+          - videoFormat: DOLBY_VISION
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+      - pictureMode: Dynamic2
+        videoFormatCapabilities:
+          - videoFormat: SDR
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+              - COMPOSITE_1
+          - videoFormat: HLG
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+          - videoFormat: HDR10
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+          - videoFormat: DOLBY_VISION
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+      - pictureMode: Sports
+        videoFormatCapabilities:
+          - videoFormat: SDR
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+              - COMPOSITE_1
+          - videoFormat: HLG
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+          - videoFormat: HDR10
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+          - videoFormat: DOLBY_VISION
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+      - pictureMode: Movie
+        videoFormatCapabilities:
+          - videoFormat: SDR
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+              - COMPOSITE_1
+          - videoFormat: HLG
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+          - videoFormat: HDR10
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+          - videoFormat: DOLBY_VISION
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+      - pictureMode: Expert
+        videoFormatCapabilities:
+          - videoFormat: SDR
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+              - COMPOSITE_1
+          - videoFormat: HLG
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+          - videoFormat: HDR10
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+          - videoFormat: DOLBY_VISION
+            supportedAVSources:
+              - IP
+              - TUNER
+              - HDMI_1
+              - HDMI_2
+              - HDMI_3
+    colorTemperatureNames:
+      - Cool
+      - Normal
+      - Warm
