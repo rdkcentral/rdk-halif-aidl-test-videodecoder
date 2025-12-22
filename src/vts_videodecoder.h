@@ -333,11 +333,10 @@ size_t vts_bytesPerPixel(PixelFormat format);
         Status status; \
         UT_LOG_INFO("Calling getVideoDecoder(IN:_decoderId:[%d], OUT:videoDecoder[])", _decoderId.value); \
         status = gVideoDecoderManager->getVideoDecoder(_decoderId, &videoDecoder); \
-        UT_LOG_INFO("Result getVideoDecoder(IN:_decoderId:[%d], OUT:videoDecoder[0x%X]), status:[isOK:%s, exception:%s]", \
-                                _decoderId.value, videoDecoder.get(), UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+        UT_LOG_INFO("Result getVideoDecoder(IN:_decoderId:[%d]), status:[isOK:%s, exception:%s]", \
+                                _decoderId.value, UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                                 UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         UT_ASSERT_FALSE(status.isOk()); \
-        UT_ASSERT_TRUE(videoDecoder.get() == nullptr); \
         UT_ASSERT_EQUAL(status.exceptionCode(), Status::EX_ILLEGAL_ARGUMENT) << "Expected EX_ILLEGAL_ARGUMENT for invalid decoder ID"; \
     } while (0)
 
@@ -509,11 +508,10 @@ do { \
         UT_LOG_INFO("Calling getPropertyMulti(IN:propertyKVList.size:[%zu], OUT:_aidl_return)", (propertyKVList).size()); \
     } \
     status = (videoDecoder)->getPropertyMulti(_propertyKVList, &(aidl_return)); \
-    UT_LOG_INFO("Result getPropertyMulti(OUT:_aidl_return:[%s]), status:[isOK:%s, exception:%s]", \
-                UT_Control_GetMapString(bool_mapTable, (aidl_return)), \
+    UT_LOG_INFO("Result getPropertyMulti(), status:[isOK:%s, exception:%s]", \
                 UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                 UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
-    UT_ASSERT_FALSE(aidl_return) << "getPropertyMulti should return false for invalid/empty input"; \
+    UT_ASSERT_FALSE(status.isOk()); \
     UT_ASSERT_EQUAL(status.exceptionCode(), exception); \
 } while (0)
 
@@ -620,15 +618,19 @@ do { \
         UT_LOG_INFO("Calling open(IN:codec:[%d], IN:secure:[%s], IN:listener:[0x%p], OUT:controller[])", \
                     static_cast<int32_t>(codec), UT_Control_GetMapString(bool_mapTable, (secure)), tempListener ? tempListener.get() : nullptr); \
         status = (videoDecoder)->open((codec), (secure), (listener), &(controller)); \
-        UT_LOG_INFO("Result open(IN:codec:[%d], IN:secure:[%s], IN:listener:[0x%p], OUT:controller:[0x%X]), status:[isOK:%s, exception:%s]", \
-                    static_cast<int32_t>(codec), UT_Control_GetMapString(bool_mapTable, (secure)), tempListener ? tempListener.get() : nullptr, \
-                    (controller).get(), \
-                    UT_Control_GetMapString(bool_mapTable, status.isOk()), \
-                    UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         if ((exception) == Status::EX_NONE) { \
+            UT_LOG_INFO("Result open(IN:codec:[%d], IN:secure:[%s], IN:listener:[0x%p], OUT:controller:[0x%X]), status:[isOK:%s, exception:%s]", \
+                        static_cast<int32_t>(codec), UT_Control_GetMapString(bool_mapTable, (secure)), tempListener ? tempListener.get() : nullptr, \
+                        (controller).get(), \
+                        UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+                        UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
             UT_ASSERT_TRUE(status.isOk()) << "Binder call failed unexpectedly"; \
             UT_ASSERT_EQUAL((controller).get(), nullptr) << "Expected null controller for unsupported parameters"; \
         } else { \
+            UT_LOG_INFO("Result open(IN:codec:[%d], IN:secure:[%s], IN:listener:[0x%p]), status:[isOK:%s, exception:%s]", \
+                        static_cast<int32_t>(codec), UT_Control_GetMapString(bool_mapTable, (secure)), tempListener ? tempListener.get() : nullptr, \
+                        UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+                        UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
             UT_ASSERT_FALSE(status.isOk()) << "Expected failure with exception"; \
             UT_ASSERT_EQUAL(status.exceptionCode(), (exception)) << "Unexpected exception code"; \
         } \
@@ -675,14 +677,18 @@ do { \
         sp<IVideoDecoderController> tempController = (controller); \
         UT_LOG_INFO("Calling close(IN:videoDecoderController:[0x%p], OUT:_aidl_return[])", tempController ? tempController.get() : nullptr); \
         status = (videoDecoder)->close((controller), &aidl_return); \
-        UT_LOG_INFO("Result close(IN:videoDecoderController:[0x%p], OUT:_aidl_return:[%s]), status:[isOK:%s, exception:%s]", \
-                     tempController ? tempController.get() : nullptr, UT_Control_GetMapString(bool_mapTable, aidl_return), \
-                    UT_Control_GetMapString(bool_mapTable, status.isOk()), \
-                    UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         if ((exception) == Status::EX_NONE) { \
+            UT_LOG_INFO("Result close(IN:videoDecoderController:[0x%p], OUT:_aidl_return:[%s]), status:[isOK:%s, exception:%s]", \
+                         tempController ? tempController.get() : nullptr, UT_Control_GetMapString(bool_mapTable, aidl_return), \
+                        UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+                        UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
             UT_ASSERT_TRUE(status.isOk()) << "Binder call failed unexpectedly"; \
             UT_ASSERT_FALSE(aidl_return) << "Expected close to return false"; \
         } else { \
+            UT_LOG_INFO("Result close(IN:videoDecoderController:[0x%p]), status:[isOK:%s, exception:%s]", \
+                         tempController ? tempController.get() : nullptr, \
+                        UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+                        UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
             UT_ASSERT_FALSE(status.isOk()) << "Expected failure with exception"; \
             UT_ASSERT_EQUAL(status.exceptionCode(), (exception)) << "Unexpected exception code"; \
         } \
@@ -765,14 +771,18 @@ do { \
         sp<IVideoDecoderEventListener> tempListener = (listener); \
         UT_LOG_INFO("Calling registerEventListener(IN:videoDecoderEventListener:[0x%p], OUT:_aidl_return[])", tempListener ? tempListener.get() : nullptr); \
         status = (videoDecoder)->registerEventListener((listener), &aidl_return); \
-        UT_LOG_INFO("Result registerEventListener(IN:videoDecoderEventListener:[0x%p], OUT:_aidl_return:[%s]), status:[isOK:%s, exception:%s]", \
-                    tempListener ? tempListener.get() : nullptr, UT_Control_GetMapString(bool_mapTable, aidl_return), \
-                    UT_Control_GetMapString(bool_mapTable, status.isOk()), \
-                    UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         if ((exception) == Status::EX_NONE) { \
+            UT_LOG_INFO("Result registerEventListener(IN:videoDecoderEventListener:[0x%p], OUT:_aidl_return:[%s]), status:[isOK:%s, exception:%s]", \
+                        tempListener ? tempListener.get() : nullptr, UT_Control_GetMapString(bool_mapTable, aidl_return), \
+                        UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+                        UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
             UT_ASSERT_TRUE(status.isOk()) << "Binder call failed unexpectedly"; \
             UT_ASSERT_FALSE(aidl_return) << "Expected registerEventListener to return false"; \
         } else { \
+            UT_LOG_INFO("Result registerEventListener(IN:videoDecoderEventListener:[0x%p]), status:[isOK:%s, exception:%s]", \
+                        tempListener ? tempListener.get() : nullptr, \
+                        UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+                        UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
             UT_ASSERT_FALSE(status.isOk()) << "Expected failure with exception"; \
             UT_ASSERT_EQUAL(status.exceptionCode(), (exception)) << "Unexpected exception code"; \
         } \
@@ -784,14 +794,18 @@ do { \
         bool _aidl_return; \
         UT_LOG_INFO("Calling unregisterEventListener(IN:eventListener[0x%p], OUT:_aidl_return[])", (eventListener) ? (eventListener).get() : nullptr); \
         status = (videoDecoder)->unregisterEventListener((eventListener), &_aidl_return); \
-        UT_LOG_INFO("Result unregisterEventListener(IN:eventListener[0x%p], OUT:_aidl_return[%s]), status:[isOK:%s, exception:%s]", \
-                    (eventListener) ? (eventListener).get() : nullptr, UT_Control_GetMapString(bool_mapTable, _aidl_return), \
-                    UT_Control_GetMapString(bool_mapTable, status.isOk()), \
-                    UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         if ((exception) == Status::EX_NONE) { \
+            UT_LOG_INFO("Result unregisterEventListener(IN:eventListener[0x%p], OUT:_aidl_return[%s]), status:[isOK:%s, exception:%s]", \
+                        (eventListener) ? (eventListener).get() : nullptr, UT_Control_GetMapString(bool_mapTable, _aidl_return), \
+                        UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+                        UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
             UT_ASSERT_TRUE(status.isOk()); \
             UT_ASSERT_FALSE(_aidl_return) << "Expected unregisterEventListener to return false"; \
         } else { \
+            UT_LOG_INFO("Result unregisterEventListener(IN:eventListener[0x%p]), status:[isOK:%s, exception:%s]", \
+                        (eventListener) ? (eventListener).get() : nullptr, \
+                        UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+                        UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
             UT_ASSERT_FALSE(status.isOk()); \
             UT_ASSERT_EQUAL(status.exceptionCode(), (exception)) << "Unexpected exception code"; \
         } \
@@ -908,8 +922,8 @@ do { \
         UT_LOG_INFO("Calling setProperty(IN:property[%d], IN:propertyValue=%d) expecting failure", \
                     static_cast<int32_t>(property), logValue); \
         status = videoDecoderController->setProperty(property, propertyValue, &result); \
-        UT_LOG_INFO("Result setProperty(IN:property[%d], OUT:result=%d), status:[isOK:%s, exception:%s]", \
-                    static_cast<int32_t>(property), result, \
+        UT_LOG_INFO("Result setProperty(IN:property[%d]), status:[isOK:%s, exception:%s]", \
+                    static_cast<int32_t>(property), \
                     UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         UT_ASSERT_FALSE(status.isOk()); \
@@ -1111,8 +1125,7 @@ do { \
         UT_LOG_INFO("Calling parseCodecSpecificData(IN:csdVideoFormat:[%d], IN:codecData:size:[%zu])", \
                     static_cast<int32_t>(csdVideoFormat), codecData.size()); \
         status = (videoDecoderController)->parseCodecSpecificData(csdVideoFormat, codecData, &result); \
-        UT_LOG_INFO("Result parseCodecSpecificData(OUT:result:[%s]), status:[isOK:%s, exception:%s]", \
-                    UT_Control_GetMapString(bool_mapTable, result), \
+        UT_LOG_INFO("Result parseCodecSpecificData(), status:[isOK:%s, exception:%s]", \
                     UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         UT_ASSERT_FALSE(status.isOk()) << "parseCodecSpecificData succeeded unexpectedly"; \
@@ -1132,8 +1145,7 @@ do { \
         UT_LOG_INFO("Calling parseCodecSpecificData(IN:csdVideoFormat:[%d], IN:codecData:size:[%zu])", \
                     static_cast<int32_t>(csdVideoFormat), codecData.size()); \
         status = videoDecoderController->parseCodecSpecificData(csdVideoFormat, codecData, &result); \
-        UT_LOG_INFO("Result parseCodecSpecificData(OUT:result:[%s]), status:[isOK:%s, exception:%s]", \
-                    UT_Control_GetMapString(bool_mapTable, result), \
+        UT_LOG_INFO("Result parseCodecSpecificData(), status:[isOK:%s, exception:%s]", \
                     UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         UT_ASSERT_FALSE(status.isOk()) << "parseCodecSpecificData should fail"; \
@@ -1156,11 +1168,10 @@ do { \
     do { \
         bool decodeResult; \
         Status status = controller->decodeBuffer(pts, bufferHandle, &decodeResult); \
-        UT_LOG_INFO("decodeBuffer(pts=%lld, bufferHandle=0x%016" PRIx64 ") status=%s, result=%s", \
+        UT_LOG_INFO("decodeBuffer(pts=%lld, bufferHandle=0x%016" PRIx64 ") status=%s", \
                     static_cast<long long>(pts), static_cast<long long>(bufferHandle), \
-                    UT_Control_GetMapString(bool_mapTable, status.isOk()), \
-                    decodeResult ? "true" : "false"); \
-        UT_ASSERT_FALSE(status.isOk() || decodeResult) << "decodeBuffer unexpectedly succeeded"; \
+                    UT_Control_GetMapString(bool_mapTable, status.isOk())); \
+        UT_ASSERT_FALSE(status.isOk()) << "decodeBuffer unexpectedly succeeded"; \
         if (expectedException != Status::EX_NONE) { \
             UT_ASSERT_TRUE(status.exceptionCode() == expectedException) \
                 << "decodeBuffer returned unexpected exception"; \
