@@ -94,7 +94,7 @@ public:
 
     android::binder::Status getCapabilities(videodecoder::Capabilities* _aidl_return) override;
     android::binder::Status getProperty(videodecoder::Property property, std::optional<PropertyValue>* _aidl_return) override;
-    android::binder::Status getPropertyMulti(std::vector<videodecoder::PropertyKVPair>* propertyKVList, bool* _aidl_return) override;
+    android::binder::Status getPropertyMulti(const std::vector<videodecoder::Property>& properties, std::vector<videodecoder::PropertyKVPair>* propertyKVList, bool* _aidl_return) override;
     android::binder::Status getState(State* _aidl_return) override;
     android::binder::Status open(videodecoder::Codec codec, bool secure, const android::sp<videodecoder::IVideoDecoderControllerListener>& videoDecoderControllerListener, android::sp<videodecoder::IVideoDecoderController>* _aidl_return) override;
     android::binder::Status close(const android::sp<videodecoder::IVideoDecoderController>& videoDecoderController, bool* _aidl_return) override;

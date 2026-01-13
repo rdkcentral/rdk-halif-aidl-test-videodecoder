@@ -460,20 +460,32 @@ do { \
 /**
  * @brief Calls getPropertyMulti and verifies the result.
  * @param[in] videoDecoder The IVideoDecoder instance.
- * @param[in,out] propertyKVList The list of PropertyKVPair to query and populate.
+ * @param[in] properties The list of Property enum values to query.
+ * @param[out] propertyKVList The list of PropertyKVPair to populate.
  * @param[out] aidl_return The boolean result of the operation.
  */
-#define VIDEODECODER_GETPROPERTYMULTI(videoDecoder, propertyKVList, aidl_return) \
+#define VIDEODECODER_GETPROPERTYMULTI(videoDecoder, properties, propertyKVList, aidl_return) \
     do { \
         Status status; \
-        UT_LOG_INFO("Calling getPropertyMulti(IN:propertyKVList.size:[%zu], OUT:_aidl_return)", (propertyKVList).size()); \
-        status = (videoDecoder)->getPropertyMulti(&(propertyKVList), &(aidl_return)); \
-        UT_LOG_INFO("Result getPropertyMulti(OUT:_aidl_return:[%s]), status:[isOK:%s, exception:%s]", \
+        UT_LOG_INFO("Calling getPropertyMulti(IN:properties.size:[%zu], OUT:propertyKVList[], OUT:_aidl_return)", (properties).size()); \
+        status = (videoDecoder)->getPropertyMulti((properties), &(propertyKVList), &(aidl_return)); \
+        UT_LOG_INFO("Result getPropertyMulti(OUT:propertyKVList.size:[%zu], OUT:_aidl_return:[%s]), status:[isOK:%s, exception:%s]", \
+                    (propertyKVList).size(), \
                     UT_Control_GetMapString(bool_mapTable, (aidl_return)), \
                     UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         UT_ASSERT_TRUE(status.isOk()) << "Binder call failed: " << status.exceptionMessage().c_str(); \
         UT_ASSERT_TRUE(aidl_return) << "getPropertyMulti returned false."; \
+    } while (0)
+
+/**
+ * @brief Adds a Property enum value to a properties vector for getPropertyMulti input.
+ * @param[in,out] properties The vector to append to.
+ * @param[in] prop The Property enum value to add.
+ */
+#define VIDEODECODER_ADD_PROPERTY(properties, prop) \
+    do { \
+        (properties).push_back(videodecoder::Property::prop); \
     } while (0)
 
 /**
@@ -492,22 +504,24 @@ do { \
     /**
  * @brief Calls getPropertyMulti for a negative test and verifies failure.
  * @param[in] videoDecoder The IVideoDecoder instance.
- * @param[in,out] propertyKVList The list of PropertyKVPair to query (invalid or empty).
+ * @param[in] properties The list of Property enum values to query (may be invalid or empty).
+ * @param[in,out] propertyKVList The list of PropertyKVPair output.
  * @param[out] aidl_return The boolean result, expected to be false.
+ * @param[in] exception The expected exception code.
  */
-#define VIDEODECODER_GETPROPERTYMULTI_FAILURE(videoDecoder, propertyKVList, aidl_return, exception) \
+#define VIDEODECODER_GETPROPERTYMULTI_FAILURE(videoDecoder, properties, propertyKVList, aidl_return, exception) \
 do { \
     Status status; \
     std::vector<videodecoder::PropertyKVPair>* _propertyKVList = &propertyKVList; \
     if(exception == Status::EX_NULL_POINTER) \
     { \
-        UT_LOG_INFO("Calling getPropertyMulti(IN:propertyKVList :NULL, OUT:_aidl_return)"); \
+        UT_LOG_INFO("Calling getPropertyMulti(IN:properties.size:[%zu], OUT:propertyKVList:NULL, OUT:_aidl_return)", (properties).size()); \
         _propertyKVList = nullptr; \
     } \
     else { \
-        UT_LOG_INFO("Calling getPropertyMulti(IN:propertyKVList.size:[%zu], OUT:_aidl_return)", (propertyKVList).size()); \
+        UT_LOG_INFO("Calling getPropertyMulti(IN:properties.size:[%zu], OUT:propertyKVList[], OUT:_aidl_return)", (properties).size()); \
     } \
-    status = (videoDecoder)->getPropertyMulti(_propertyKVList, &(aidl_return)); \
+    status = (videoDecoder)->getPropertyMulti((properties), _propertyKVList, &(aidl_return)); \
     UT_LOG_INFO("Result getPropertyMulti(), status:[isOK:%s, exception:%s]", \
                 UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                 UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \

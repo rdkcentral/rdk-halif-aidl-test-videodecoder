@@ -538,27 +538,33 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getProperty_neg) {
         UT_ASSERT_TRUE(vts_videodecoder_helper_validatePropertyValue(decoder_id, aidl_return_single,
             videodecoder::Property::RESOURCE_ID)) << "RESOURCE_ID validation failed";
 
-        // Populate propertyKVList with properties to query
-        std::vector<PropertyKVPair> propertyKVList;
-        VIDEODECODER_ADD_PROPERTYKVPAIR(propertyKVList, RESOURCE_ID);
-        VIDEODECODER_ADD_PROPERTYKVPAIR(propertyKVList, INPUT_QUEUE_DEPTH);
-        VIDEODECODER_ADD_PROPERTYKVPAIR(propertyKVList, OUTPUT_FRAME_POOL_SIZE);
-        VIDEODECODER_ADD_PROPERTYKVPAIR(propertyKVList, OPERATIONAL_MODE);
-        VIDEODECODER_ADD_PROPERTYKVPAIR(propertyKVList, SECURE_VIDEO);
-        VIDEODECODER_ADD_PROPERTYKVPAIR(propertyKVList, METRIC_FRAMES_DECODED);
-        VIDEODECODER_ADD_PROPERTYKVPAIR(propertyKVList, METRIC_DECODE_ERRORS);
-        VIDEODECODER_ADD_PROPERTYKVPAIR(propertyKVList, METRIC_FRAMES_DROPPED);
+        // Populate properties list with properties to query
+        std::vector<videodecoder::Property> properties;
+        VIDEODECODER_ADD_PROPERTY(properties, RESOURCE_ID);
+        VIDEODECODER_ADD_PROPERTY(properties, INPUT_QUEUE_DEPTH);
+        VIDEODECODER_ADD_PROPERTY(properties, OUTPUT_FRAME_POOL_SIZE);
+        VIDEODECODER_ADD_PROPERTY(properties, OPERATIONAL_MODE);
+        VIDEODECODER_ADD_PROPERTY(properties, SECURE_VIDEO);
+        VIDEODECODER_ADD_PROPERTY(properties, METRIC_FRAMES_DECODED);
+        VIDEODECODER_ADD_PROPERTY(properties, METRIC_DECODE_ERRORS);
+        VIDEODECODER_ADD_PROPERTY(properties, METRIC_FRAMES_DROPPED);
 
         // Call getPropertyMulti and validate result
+        std::vector<PropertyKVPair> propertyKVList;
         bool aidl_return = false;
-        VIDEODECODER_GETPROPERTYMULTI(decoder, propertyKVList, aidl_return);
+        VIDEODECODER_GETPROPERTYMULTI(decoder, properties, propertyKVList, aidl_return);
 
         // Validate each returned PropertyKVPair
-        for (const auto& kvPair : propertyKVList) {
-            UT_ASSERT_TRUE(kvPair.propertyValue.value.has_value())
-                << "Property " << static_cast<int>(kvPair.property) << " has no value.";
-            UT_ASSERT_TRUE(vts_videodecoder_helper_validatePropertyValue(decoder_id, kvPair.propertyValue, kvPair.property))
-                << "Validation failed for property " << static_cast<int>(kvPair.property);
+        UT_ASSERT_EQUAL(propertyKVList.size(), properties.size())
+            << "Returned propertyKVList size does not match input properties size.";
+
+        for (size_t i = 0; i < propertyKVList.size(); i++) {
+            UT_ASSERT_EQUAL(propertyKVList[i].property, properties[i])
+                << "Property mismatch at index " << i;
+            UT_ASSERT_TRUE(propertyKVList[i].propertyValue.value.has_value())
+                << "Property " << static_cast<int>(propertyKVList[i].property) << " has no value.";
+            UT_ASSERT_TRUE(vts_videodecoder_helper_validatePropertyValue(decoder_id, propertyKVList[i].propertyValue, propertyKVList[i].property))
+                << "Validation failed for property " << static_cast<int>(propertyKVList[i].property);
         }
     }
 }
@@ -568,7 +574,7 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getProperty_neg) {
 /**
  * @brief Test the behavior of the VideoDecoder when invalid or empty property keys are provided.
  *
- * This test checks the VideoDecoder's response to invalid property keys and empty property lists. It ensures that the decoder handles these scenarios gracefully without crashing and returns expected results.
+ * This test checks the VideoDecoder's response to invalid property keys, empty property lists, and null out-parameters. It ensures that the decoder handles these error scenarios gracefully and returns appropriate error codes per the API specification.
  *
  * **Test Group ID:** Basic: 01@n
  * **Test Case ID:** 009@n
@@ -581,10 +587,12 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getProperty_neg) {
  * **Test Procedure:**@n
  * | Variation / Step | Description | Test Data | Expected Result | Notes |
  * | :----: | --------- | ---------- |-------------- | ----- |
- * | 01 | Initialize invalid property key pair and add to list | invalidPair.property = -1 | aidlReturnInvalid = false, kvPair.propertyValue.value.has_value() = false | Should Fail |
- * | 02 | Call getPropertyMulti with invalid property list | propertyKVListInvalid, aidlReturnInvalid | statusInvalid.isOk() = false, statusInvalid.exceptionCode() = expected exception | Should Fail |
- * | 03 | Initialize empty property list | propertyKVListEmpty | aidlReturnEmpty = false | Should Fail |
- * | 04 | Call getPropertyMulti with empty property list | propertyKVListEmpty, aidlReturnEmpty | statusEmpty.isOk() = false, statusEmpty.exceptionCode() = expected exception | Should Fail |
+ * | 01 | Initialize invalid property key and add to list | propertiesInvalid = [-1] | aidlReturnInvalid = false | Should Fail |
+ * | 02 | Call getPropertyMulti with invalid property list | propertiesInvalid, propertyKVListInvalid, aidlReturnInvalid | statusInvalid.isOk() = false, statusInvalid.exceptionCode() = EX_ILLEGAL_ARGUMENT | Should Fail |
+ * | 03 | Initialize empty property list | propertiesEmpty = [] | aidlReturnEmpty = false | Should Fail |
+ * | 04 | Call getPropertyMulti with empty property list | propertiesEmpty, propertyKVListEmpty, aidlReturnEmpty | statusEmpty.isOk() = false, statusEmpty.exceptionCode() = EX_ILLEGAL_ARGUMENT | Should Fail |
+ * | 05 | Initialize valid properties list | propertiesValid = [RESOURCE_ID, INPUT_QUEUE_DEPTH] | Should be successful | Should be successful |
+ * | 06 | Call getPropertyMulti with null out-parameter (propertyKVList) | propertiesValid, NULL, aidlReturnNull | statusNull.isOk() = false, statusNull.exceptionCode() = EX_NULL_POINTER | Should Fail |
  */
 UT_ADD_TEST(VTS_L1_VideoDecoder, getPropertyMulti_neg) {
     std::vector<IVideoDecoder::Id> decoderIds;
@@ -595,24 +603,30 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getPropertyMulti_neg) {
     VIDEODECODER_MANAGER_GETVIDEODECODER_SUCCESS(decoderIds[0], decoder);
     UT_ASSERT_TRUE(decoder != nullptr) << "Decoder pointer is null";
 
-    // Negative Test - Invalid Property Key
+    // Negative Test 1 - Invalid Property Key
+    std::vector<videodecoder::Property> propertiesInvalid;
+    propertiesInvalid.push_back(static_cast<videodecoder::Property>(-1));
+
     std::vector<PropertyKVPair> propertyKVListInvalid;
-    PropertyKVPair invalidPair;
-    invalidPair.property = static_cast<videodecoder::Property>(-1);
-    propertyKVListInvalid.push_back(invalidPair);
-
     bool aidlReturnInvalid = false;
-    VIDEODECODER_GETPROPERTYMULTI_FAILURE(decoder, propertyKVListInvalid, aidlReturnInvalid, Status::EX_ILLEGAL_ARGUMENT);
+    VIDEODECODER_GETPROPERTYMULTI_FAILURE(decoder, propertiesInvalid, propertyKVListInvalid, aidlReturnInvalid, Status::EX_ILLEGAL_ARGUMENT);
 
-    for (const auto& kvPair : propertyKVListInvalid) {
-        UT_ASSERT_FALSE(kvPair.propertyValue.value.has_value())
-            << "videodecoder::Property " << static_cast<int>(kvPair.property) << " should not have a value";
-    }
-
-    // Negative Test - Empty Property List
+    // Negative Test 2 - Empty Property List
+    // Per API spec: "Passing an empty `properties` array is an error" with EX_ILLEGAL_ARGUMENT
+    std::vector<videodecoder::Property> propertiesEmpty;
     std::vector<PropertyKVPair> propertyKVListEmpty;
     bool aidlReturnEmpty = false;
-    VIDEODECODER_GETPROPERTYMULTI_FAILURE(decoder, propertyKVListEmpty, aidlReturnEmpty, Status::EX_NULL_POINTER);
+    VIDEODECODER_GETPROPERTYMULTI_FAILURE(decoder, propertiesEmpty, propertyKVListEmpty, aidlReturnEmpty, Status::EX_ILLEGAL_ARGUMENT);
+
+    // Negative Test 3 - Null out-parameter (propertyKVList)
+    // Per API spec: "If a required out-parameter is null (e.g. `propertyKVList`), the call fails with `EX_NULL_POINTER`"
+    std::vector<videodecoder::Property> propertiesValid;
+    VIDEODECODER_ADD_PROPERTY(propertiesValid, RESOURCE_ID);
+    VIDEODECODER_ADD_PROPERTY(propertiesValid, INPUT_QUEUE_DEPTH);
+
+    std::vector<PropertyKVPair> propertyKVListNull;
+    bool aidlReturnNull = false;
+    VIDEODECODER_GETPROPERTYMULTI_FAILURE(decoder, propertiesValid, propertyKVListNull, aidlReturnNull, Status::EX_NULL_POINTER);
 
 }
 

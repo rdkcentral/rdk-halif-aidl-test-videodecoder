@@ -226,23 +226,44 @@ android::binder::Status VideoDecoder::getProperty(videodecoder::Property propert
     return android::binder::Status::ok();
 }
 
-android::binder::Status VideoDecoder::getPropertyMulti(std::vector<videodecoder::PropertyKVPair>* propertyKVList, bool* _aidl_return) {
-    if (!propertyKVList || propertyKVList->empty()) {
-        LOG(ERROR) << "getPropertyMulti: null or empty propertyKVList";
+android::binder::Status VideoDecoder::getPropertyMulti(const std::vector<videodecoder::Property>& properties, std::vector<videodecoder::PropertyKVPair>* propertyKVList, bool* _aidl_return) {
+    // Check _aidl_return first before dereferencing it anywhere
+    if (!_aidl_return) {
+        LOG(ERROR) << "getPropertyMulti: null _aidl_return output parameter";
+        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
+    }
+
+    if (!propertyKVList) {
+        LOG(ERROR) << "getPropertyMulti: null propertyKVList output parameter";
+        *_aidl_return = false;
+        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
+    }
+
+    if (properties.empty()) {
+        LOG(ERROR) << "getPropertyMulti: empty properties input";
         *_aidl_return = false;
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_ARGUMENT);
     }
-    for (auto& kv : *propertyKVList) {
-        LOG(DEBUG) << "getPropertyMulti: processing property " << static_cast<int32_t>(kv.property);
+
+    propertyKVList->clear();
+
+    for (const auto& property : properties) {
+        LOG(DEBUG) << "getPropertyMulti: processing property " << static_cast<int32_t>(property);
         std::optional<PropertyValue> value;
-        android::binder::Status status = getProperty(kv.property, &value);
+        android::binder::Status status = getProperty(property, &value);
         if (!status.isOk()) {
-            LOG(ERROR) << "getPropertyMulti: failed for property " << static_cast<int32_t>(kv.property) << ", status: " << status.exceptionCode();
-            *_aidl_return = false; // Set to false on failure
-            return status; // Propagate the failure status
+            LOG(ERROR) << "getPropertyMulti: failed for property " << static_cast<int32_t>(property) << ", status: " << status.exceptionCode();
+            *_aidl_return = false;
+            propertyKVList->clear();
+            return status;
         }
-        kv.propertyValue = value.value();
+
+        videodecoder::PropertyKVPair kvPair;
+        kvPair.property = property;
+        kvPair.propertyValue = value.value();
+        propertyKVList->push_back(kvPair);
     }
+
     LOG(DEBUG) << "getPropertyMulti: all properties processed successfully";
     *_aidl_return = true;
     return android::binder::Status::ok();
