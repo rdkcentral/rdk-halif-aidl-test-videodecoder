@@ -113,30 +113,42 @@ static const int32_t intValueAVSourceUnknown = 0;
  * | 03 | Log the result of getVideoDecoderIds call. | decoderIds.size(), status | Log should show size and status | Should be successful |
  * | 04 | Assert that the status is OK. | status.isOk() | Assertion should pass | Should Pass |
  * | 05 | Assert that decoderIds is not empty. | decoderIds | Assertion should pass | Should Pass |
- * | 06 | Retrieve expected count of video decoder IDs. | expectedCount = UT_KVP_PROFILE_GET_LIST_COUNT("IVideoDecoderManager.IVideoDecoder") | Should be successful | |
+ * | 06 | Retrieve expected count of video decoder IDs. | expectedCount = UT_KVP_PROFILE_GET_LIST_COUNT("videodecoder.IVideoDecoder") | Should be successful | |
  * | 07 | Assert that the size of decoderIds matches expected count. | decoderIds.size(), expectedCount | Assertion should pass | Should Pass |
  * | 08 | Iterate over expected IDs and verify each is present in decoderIds. | expectedId, decoderIds | Assertion should pass for each ID | Should Pass |
  */
 UT_ADD_TEST(VTS_L1_VideoDecoder,getVideoDecoderIds_pos) {
-    std::vector<videodecoder::IVideoDecoder::Id> decoderIds;
-    size_t expectedCount = 0;
+    std::vector<videodecoder::IVideoDecoder::Id> initialDecoderIds;
+    std::vector<videodecoder::IVideoDecoder::Id> secondDecoderIds;
 
-    VIDEODECODER_MANAGER_GETVIDEODECODERIDS(decoderIds);
+    /* Get the Video decoder IDs */
+    VIDEODECODER_MANAGER_GETVIDEODECODERIDS(initialDecoderIds);
 
-    std::string videodecoder_count_path = "IVideoDecoderManager.IVideoDecoder";
-    expectedCount = UT_KVP_PROFILE_GET_LIST_COUNT(videodecoder_count_path.c_str());
-    UT_LOG_INFO("Expected count from profile: %zu", expectedCount);
-    UT_ASSERT_TRUE(expectedCount > 0) << "Profile returned invalid count.";
-    UT_ASSERT_EQUAL(decoderIds.size(), expectedCount) << "Decoder ID count mismatch.";
+    /* Get the Video decoder IDs second time */
+    VIDEODECODER_MANAGER_GETVIDEODECODERIDS(secondDecoderIds);
 
-    for (size_t i = 0; i < expectedCount; ++i) {
-        std::string videodecoderidpath = "IVideoDecoderManager.IVideoDecoder." + std::to_string(i) + ".id";
-        int32_t expectedId = UT_KVP_PROFILE_GET_UINT32(videodecoderidpath.c_str());
-        UT_LOG_INFO("Checking ID at %s: %d", videodecoderidpath.c_str(), expectedId);
-        auto it = std::find_if(decoderIds.begin(), decoderIds.end(), [expectedId](const auto& id) {
-            return id.value == expectedId;
-        });
-        UT_ASSERT_TRUE(it != decoderIds.end()) << "Expected VideoDecoder ID not found: " << expectedId;
+    /* Verify both retrievals return same size and values */
+    UT_ASSERT_EQUAL(initialDecoderIds.size(), secondDecoderIds.size()) << "Decoder ID count mismatch between retrievals.";
+
+    for (size_t i = 0; i < initialDecoderIds.size(); ++i) {
+        UT_ASSERT_EQUAL(initialDecoderIds[i].value, secondDecoderIds[i].value)
+            << "Decoder ID value mismatch at index " << i;
+    }
+
+    /* Verify the count matches the HFP profile */
+    UT_ASSERT_EQUAL(initialDecoderIds.size(), gVideodecoders_hfp.size())
+        << "Decoder ID count mismatch with HFP profile.";
+
+    /* Build set of IDs from HFP profile */
+    std::unordered_set<int32_t> decoderId_from_profile;
+    for (const auto& obj : gVideodecoders_hfp) {
+        decoderId_from_profile.insert(obj.id);
+    }
+
+    /* Verify each retrieved decoder ID is listed in the HFP profile */
+    for (const auto& decoderId : initialDecoderIds) {
+        UT_ASSERT_NOT_EQUAL(decoderId_from_profile.find(decoderId.value), decoderId_from_profile.end())
+            << "VideoDecoder ID " << decoderId.value << " not found in HFP profile.";
     }
 }
 
@@ -169,27 +181,22 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getSupportedOperationalModes_pos) {
 
     VIDEODECODER_MANAGER_GETSUPPORTEDOPERATIONALMODES(supportedModes);
 
-    std::string operationalmode_count_path = "IVideoDecoderManager.supportedOperationalModes";
-    size_t expectedCount = UT_KVP_PROFILE_GET_LIST_COUNT(operationalmode_count_path.c_str());
-
-    UT_ASSERT_EQUAL(supportedModes.size(), expectedCount) << "Mismatch in number of supported operational modes.";
-
-    for (size_t i = 0; i < expectedCount; ++i) {
-        char pszReturnedString[UT_KVP_MAX_ELEMENT_SIZE];
-        std::string operationalmode_path = "IVideoDecoderManager.supportedOperationalModes." + std::to_string(i);
-        UT_KVP_PROFILE_GET_STRING(operationalmode_path.c_str(), pszReturnedString);
-        OperationalMode expectedMode;
-        if (strcmp(pszReturnedString, "TUNNELLED") == 0) {
-            expectedMode = OperationalMode::TUNNELLED;
-        } else if (strcmp(pszReturnedString, "NON_TUNNELLED") == 0) {
-            expectedMode = OperationalMode::NON_TUNNELLED;
-        } else if (strcmp(pszReturnedString, "GRAPHICS_TEXTURE") == 0) {
-            expectedMode = OperationalMode::GRAPHICS_TEXTURE;
-        } else {
-            UT_FAIL("Unsupported operational mode in YAML configuration.");
+    /* Build set of all operational modes from HFP profile */
+    std::unordered_set<videodecoder::OperationalMode> modesFromProfile;
+    for (const auto& decoder : gVideodecoders_hfp) {
+        for (const auto& mode : decoder.supportedOperationalModes) {
+            modesFromProfile.insert(mode);
         }
-        UT_ASSERT_TRUE(std::find(supportedModes.begin(), supportedModes.end(), expectedMode) != supportedModes.end())
-            << "Operational mode " << pszReturnedString << " not found in supported modes.";
+    }
+
+    /* Verify the size matches */
+    UT_ASSERT_EQUAL(supportedModes.size(), modesFromProfile.size())
+        << "Mismatch in number of supported operational modes.";
+
+    /* Verify each mode from API is present in HFP profile */
+    for (const auto& mode : supportedModes) {
+        UT_ASSERT_NOT_EQUAL(modesFromProfile.find(mode), modesFromProfile.end())
+            << "Operational mode " << static_cast<int>(mode) << " not found in HFP profile.";
     }
 }
 
@@ -218,17 +225,32 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getSupportedOperationalModes_pos) {
  */
 UT_ADD_TEST(VTS_L1_VideoDecoder,getVideoDecoder_pos) {
     std::vector<IVideoDecoder::Id> decoderIds;
-    VIDEODECODER_MANAGER_GETVIDEODECODERIDS(decoderIds); // Get IDs first
+    std::optional<PropertyValue> resource_id_1;
+    std::optional<PropertyValue> resource_id_2;
+    videodecoder::Property property = videodecoder::Property::RESOURCE_ID;
 
-    int i = 0;
-    for (const auto& id : decoderIds) {
-        IVideoDecoder::Id videoDecoderId;
-        std::string decoder_id_path = "IVideoDecoderManager.IVideoDecoder." + std::to_string(i) + ".id";
-        videoDecoderId.value = UT_KVP_PROFILE_GET_UINT32(decoder_id_path.c_str());
-        i++;
+    /* Get the Video decoder IDs */
+    VIDEODECODER_MANAGER_GETVIDEODECODERIDS(decoderIds);
 
-        sp<IVideoDecoder> videoDecoder;
-        VIDEODECODER_MANAGER_GETVIDEODECODER_SUCCESS(videoDecoderId, videoDecoder); // Macro replaces the call and checks
+    for (const auto& _decoderId : decoderIds) {
+        sp<IVideoDecoder> videoDecoder_1;
+        sp<IVideoDecoder> videoDecoder_2;
+
+        /* Get Video decoder handle */
+        VIDEODECODER_MANAGER_GETVIDEODECODER_SUCCESS(_decoderId, videoDecoder_1);
+        /* Get the resource ID */
+        VIDEODECODER_GET_PROPERTY_SUCCESS(videoDecoder_1, property, resource_id_1);
+
+        /* Get Video decoder handle again with same ID */
+        VIDEODECODER_MANAGER_GETVIDEODECODER_SUCCESS(_decoderId, videoDecoder_2);
+        /* Get the resource ID */
+        VIDEODECODER_GET_PROPERTY_SUCCESS(videoDecoder_2, property, resource_id_2);
+
+        int32_t _resource_id_1 = resource_id_1->value->get<PropertyValue::Value::Tag::intValue>();
+        int32_t _resource_id_2 = resource_id_2->value->get<PropertyValue::Value::Tag::intValue>();
+
+        UT_ASSERT_EQUAL(_resource_id_1, _resource_id_2)
+            << "Resource IDs don't match for decoder ID " << _decoderId.value;
     }
 }
 
@@ -698,9 +720,9 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getState_pos) {
  * | Variation / Step | Description | Test Data | Expected Result | Notes |
  * | :----: | --------- | ---------- |-------------- | ----- |
  * | 01 | Initialize listener for video decoder controller. | listener = new VideoDecoderControllerListener() | Listener should be initialized successfully. | Should be successful |
- * | 02 | Retrieve secure mode from YAML configuration. | securePathKey = "IVideoDecoderManager.IVideoDecoder.i.supportsSecure" | Secure mode should be retrieved successfully. | Should be successful |
- * | 03 | Retrieve supported codecs count from YAML configuration. | codecCountKey = "IVideoDecoderManager.IVideoDecoder.i.supportedCodecs" | Codec count should be retrieved successfully. | Should be successful |
- * | 04 | Loop through each supported codec and retrieve codec name. | codecPathKey = "IVideoDecoderManager.IVideoDecoder.i.supportedCodecs.j" | Codec name should be retrieved successfully. | Should be successful |
+ * | 02 | Retrieve secure mode from YAML configuration. | securePathKey = "videodecoder.IVideoDecoder.i.supportsSecure" | Secure mode should be retrieved successfully. | Should be successful |
+ * | 03 | Retrieve supported codecs count from YAML configuration. | codecCountKey = "videodecoder.IVideoDecoder.i.supportedCodecs" | Codec count should be retrieved successfully. | Should be successful |
+ * | 04 | Loop through each supported codec and retrieve codec name. | codecPathKey = "videodecoder.IVideoDecoder.i.supportedCodecs.j" | Codec name should be retrieved successfully. | Should be successful |
  * | 05 | Map codec name to Codec enum. | codecName = "MPEG"/"H264"/"H265"/"VP9"/"AV1" | Codec should be mapped successfully. | Should be successful |
  * | 06 | Call open function with codec, secure mode, and listener. | codec = Codec::MPEG/H264/H265/VP9/AV1, secure = true/false, listener = VideoDecoderControllerListener | Decoder should open successfully, controller should not be null. | Should Pass |
  * | 07 | Assert that the status is OK and controller is not null. | status.isOk() = true, controller != nullptr | Assertions should pass. | Should Pass |
@@ -754,10 +776,10 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, open_pos) {
  * **Test Procedure:**@n
  * | Variation / Step | Description | Test Data | Expected Result | Notes |
  * | :----: | --------- | ---------- |-------------- | ----- |
- * | 01 | Retrieve secure mode from YAML configuration | securePathKey = "IVideoDecoderManager.IVideoDecoder.i.supportsSecure" | Secure mode value retrieved | Should be successful |
- * | 02 | Retrieve supported codecs from YAML configuration | codecCountKey = "IVideoDecoderManager.IVideoDecoder.i.supportedCodecs" | Supported codecs count retrieved | Should be successful |
+ * | 01 | Retrieve secure mode from YAML configuration | securePathKey = "videodecoder.IVideoDecoder.i.supportsSecure" | Secure mode value retrieved | Should be successful |
+ * | 02 | Retrieve supported codecs from YAML configuration | codecCountKey = "videodecoder.IVideoDecoder.i.supportedCodecs" | Supported codecs count retrieved | Should be successful |
  * | 03 | Test with unsupported codec | codec = 999, secure = secure, listener = listener, controller = nullptr | status.isOk() = true, controller = nullptr | Should Pass |
- * | 04 | Retrieve valid codec from YAML configuration | codecPathKey = "IVideoDecoderManager.IVideoDecoder.i.supportedCodecs.0", codecName = codecName | Valid codec value retrieved | Should be successful |
+ * | 04 | Retrieve valid codec from YAML configuration | codecPathKey = "videodecoder.IVideoDecoder.i.supportedCodecs.0", codecName = codecName | Valid codec value retrieved | Should be successful |
  * | 05 | Test with unsupported secure mode | codec = validCodec, secure = !secure, listener = listener, controller = nullptr | status.isOk() = true, controller = nullptr | Should Pass |
  * | 06 | Test without meeting precondition (not in CLOSED state) | codec = validCodec, secure = secure, listener = listener, controller = nullptr | status.isOk() = false, status.exceptionCode() = EX_ILLEGAL_STATE | Should Fail |
  */

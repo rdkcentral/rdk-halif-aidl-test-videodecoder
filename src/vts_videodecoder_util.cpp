@@ -330,7 +330,7 @@ bool vts_videodecoder_helper_validatePropertyValue(int decoder_id,const std::opt
 UT_status_t vts_videodecoder_parseVideoDecoderHFP()
 {
     std::string videodecoderpath = VIDEODECODERMGR_IVIDEODECODER;
-    std::string opmodepath = std::string(VIDEODECODERMGR) + ".supportedOperationalModes";
+    std::string opmodepath = VIDEODECODERMGR_SUPPORTED_OPERATIONAL_MODES;
     int32_t number_of_videodecoders;
     int32_t supportedopmode_count;
     decoder_t temporary = {};
@@ -764,7 +764,7 @@ UT_status_t vts_videodecoder_parse_testconfig(void* pTestInstance, const char *m
 
     // Get input and reference paths
     char tempBuffer[UT_KVP_MAX_ELEMENT_SIZE] = {0};
-    status = ut_kvp_getStringField(kvpTestInstance, "IVideoDecoderManager.input_streams_path", tempBuffer, UT_KVP_MAX_ELEMENT_SIZE);
+    status = ut_kvp_getStringField(kvpTestInstance, "VIDEO_DECODER_STREAM_INPUT_PATH", tempBuffer, UT_KVP_MAX_ELEMENT_SIZE);
     if (status != UT_KVP_STATUS_SUCCESS)
     {
         UT_LOG_ERROR("Failed to get input_streams_path, status: %d", status);
@@ -773,7 +773,7 @@ UT_status_t vts_videodecoder_parse_testconfig(void* pTestInstance, const char *m
     streamInputPath = tempBuffer;
     UT_LOG_INFO("streamInputPath: %s", streamInputPath.c_str());
 
-    status = ut_kvp_getStringField(kvpTestInstance, "IVideoDecoderManager.reference_streams_path", tempBuffer, UT_KVP_MAX_ELEMENT_SIZE);
+    status = ut_kvp_getStringField(kvpTestInstance, "VIDEO_DECODER_STREAM_REF_PATH", tempBuffer, UT_KVP_MAX_ELEMENT_SIZE);
     if (status != UT_KVP_STATUS_SUCCESS)
     {
         UT_LOG_ERROR("Failed to get reference_streams_path, status: %d", status);

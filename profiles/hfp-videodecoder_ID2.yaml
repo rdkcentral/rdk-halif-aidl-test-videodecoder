@@ -22,27 +22,34 @@
 
 # HAL Feature Profile for videodecoder
 
-IVideoDecoderManager:           # Component object begins
+videodecoder:           # Component object begins
   interfaceVersion: current
   supportedOperationalModes:
     - NON_TUNNELLED
   IVideoDecoder:                # Resource list
-    - 2:                          # Resource object begins
-      ID : 2
-      supportedCodecs:          # Array of codec capabilities
-        - H264:
+    - 2:
+      supportedCodecs:
+        - H264_AVC:
+            profile: H264_HIGH
+            level: H264_LEVEL_4_1
             maxFrameRate: 60
             maxFrameWidth: 1920
             maxFrameHeight: 1080
-        - H265:
+        - H265_HEVC:
+            profile: H265_MAIN
+            level: H265_LEVEL_5_1
             maxFrameRate: 60
             maxFrameWidth: 3840
             maxFrameHeight: 2160
         - VP9:
+            profile: VP9_PROFILE_2
+            level: VP9_LEVEL_5_1
             maxFrameRate: 60
             maxFrameWidth: 3840
             maxFrameHeight: 2160
         - AV1:
+            profile: AV1_MAIN
+            level: AV1_LEVEL_5_1
             maxFrameRate: 60
             maxFrameWidth: 3840
             maxFrameHeight: 2160

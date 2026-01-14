@@ -133,8 +133,9 @@
 
 #include "vts_helper_functions.h"
 
-#define VIDEODECODERMGR "IVideoDecoderManager"
-#define VIDEODECODERMGR_IVIDEODECODER "IVideoDecoderManager.IVideoDecoder"
+#define VIDEODECODERMGR "videodecoder"
+#define VIDEODECODERMGR_IVIDEODECODER "videodecoder.IVideoDecoder"
+#define VIDEODECODERMGR_SUPPORTED_OPERATIONAL_MODES "videodecoder.supportedOperationalModes"
 
 using namespace com::rdk::hal;
 using namespace com::rdk::hal::videodecoder;
@@ -157,9 +158,9 @@ extern std::vector<sp<IVideoDecoderController>>  controllers;
 
 #define VIDEO_DECODER_TEST_CONFIG_PATH "./videodecoder_test_configuration/vts_l3_VideoDecoder_test_config.yaml"
 #define VIDEO_DECODER_STREAM_CONFIG_PATH "./videodecoder_test_configuration/vts_stream_list.yaml"
-#define VIDEO_DECODER_STREAM_DOWNLOAD_PATH "IVideoDecoderManager.stream_download_path"
-#define VIDEO_DECODER_STREAM_INPUT_PATH "IVideoDecoderManager.input_streams_path"
-#define VIDEO_DECODER_STREAM_REF_PATH "IVideoDecoderManager.reference_streams_path"
+#define VIDEO_DECODER_STREAM_DOWNLOAD_PATH "videodecoder.stream_download_path"
+#define VIDEO_DECODER_STREAM_INPUT_PATH "videodecoder.input_streams_path"
+#define VIDEO_DECODER_STREAM_REF_PATH "videodecoder.reference_streams_path"
 
 extern void *gVideoDecoderTestConfiguration;
 
