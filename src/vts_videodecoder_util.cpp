@@ -327,6 +327,9 @@ bool vts_videodecoder_helper_validatePropertyValue(int decoder_id,const std::opt
 }
 
 
+// Maximum decoder ID to probe for in YAML files (supports IDs 0-10)
+constexpr int32_t MAX_DECODER_ID_PROBE = 10;
+
 UT_status_t vts_videodecoder_parseVideoDecoderHFP()
 {
     std::string videodecoderpath = VIDEODECODERMGR_IVIDEODECODER;
@@ -399,7 +402,7 @@ UT_status_t vts_videodecoder_parseVideoDecoderHFP()
         // These keys are stored as dictionary entries alongside other fields like supportedCodecs
         // We need to probe for which numeric key exists to determine the actual decoder ID
         int32_t decoder_id = -1;
-        for (int32_t probe_id = 0; probe_id <= 10; ++probe_id) {  // Probe IDs 0-10
+        for (int32_t probe_id = 0; probe_id <= MAX_DECODER_ID_PROBE; ++probe_id) {
             std::string id_probe_path = decoderbasepath + "." + std::to_string(probe_id);
             if (vts_videodecoder_helper_profileFieldPresent(id_probe_path)) {
                 decoder_id = probe_id;
