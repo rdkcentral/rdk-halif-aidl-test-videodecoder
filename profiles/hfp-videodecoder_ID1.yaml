@@ -27,6 +27,17 @@ videodecoder:           # Component object begins
   supportedOperationalModes:
     - NON_TUNNELLED
   IVideoDecoder:                # Resource list
+    - 0:                          # Placeholder decoder at index 0
+      supportedCodecs:          # Minimal codec configuration
+        - H264_AVC:
+            profile: H264_HIGH
+            level: H264_LEVEL_4_1
+            maxFrameRate: 30
+            maxFrameWidth: 1280
+            maxFrameHeight: 720
+      supportedDynamicRanges:
+        - SDR
+      supportsSecure: false
     - 1:                          # Resource object begins
       supportedCodecs:          # Array of codec capabilities
         - MPEG2_VIDEO:
