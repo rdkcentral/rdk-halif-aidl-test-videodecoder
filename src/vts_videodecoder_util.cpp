@@ -394,19 +394,39 @@ UT_status_t vts_videodecoder_parseVideoDecoderHFP()
     for (int32_t i = 0; i < number_of_videodecoders; ++i)
     {
         std::string decoderbasepath = videodecoderpath + "." + std::to_string(i);
+        
+        // The YAML structure uses integer keys (e.g., "- 0:", "- 1:", "- 2:") to identify decoders
+        // These keys are stored as dictionary entries alongside other fields like supportedCodecs
+        // We need to probe for which numeric key exists to determine the actual decoder ID
+        int32_t decoder_id = -1;
+        for (int32_t probe_id = 0; probe_id <= 10; ++probe_id) {  // Probe IDs 0-10
+            std::string id_probe_path = decoderbasepath + "." + std::to_string(probe_id);
+            if (vts_videodecoder_helper_profileFieldPresent(id_probe_path)) {
+                decoder_id = probe_id;
+                UT_LOG_INFO("Found decoder ID %d at array index %d (path: %s)", decoder_id, i, id_probe_path.c_str());
+                break;
+            }
+        }
+        
+        // If no numeric key was found (0-10), fall back to using array index as ID
+        if (decoder_id < 0) {
+            decoder_id = i;
+            UT_LOG_WARNING("No numeric key found for decoder at index %d, using index as ID", i);
+        }
+        
         std::string supportedcodecpath = decoderbasepath + ".supportedCodecs";
         std::string supporteddrpath = decoderbasepath + ".supportedDynamicRanges";
         std::string supportsSecurepath = decoderbasepath + ".supportsSecure";
 
-        temporary.id = i; // The ID is the index in the list.
+        temporary.id = decoder_id;
         temporary.supportsSecure = UT_KVP_PROFILE_GET_BOOL(supportsSecurepath.c_str());
         temporary.supportedCodecs.clear();
         temporary.supportedDynamicRanges.clear();
 
-        UT_LOG_INFO("Parsing Decoder ID: %d, supportsSecure: %d", temporary.id, temporary.supportsSecure);
+        UT_LOG_INFO("Parsing Decoder ID: %d (array index: %d), supportsSecure: %d", temporary.id, i, temporary.supportsSecure);
 
         int supportedcodec_count = UT_KVP_PROFILE_GET_LIST_COUNT(supportedcodecpath.c_str());
-        UT_LOG_INFO("Decoder %d: codec count=%d", i, supportedcodec_count);
+        UT_LOG_INFO("Decoder %d (array index %d): codec count=%d", temporary.id, i, supportedcodec_count);
         for (int32_t j = 0; j < supportedcodec_count; ++j)
         {
             std::string codecpath = supportedcodecpath + "." + std::to_string(j);
