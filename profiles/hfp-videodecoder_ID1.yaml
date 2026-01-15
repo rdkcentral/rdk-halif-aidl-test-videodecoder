@@ -27,7 +27,7 @@ videodecoder:           # Component object begins
   supportedOperationalModes:
     - NON_TUNNELLED
   IVideoDecoder:                # Resource list
-    - 0:                          # Placeholder decoder at index 0
+    - 0:                          # Non-functional placeholder for ID mapping - DO NOT USE
       supportedCodecs:          # Minimal codec configuration
         - H264_AVC:
             profile: H264_HIGH
