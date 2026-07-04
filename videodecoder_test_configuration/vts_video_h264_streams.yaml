@@ -950,3 +950,46 @@ VideoStreams:
       - 166667000
       - 133333000
       - 150000000
+  H264_HIGH_1920x1080_SDR_BT709_60p_YCBCR420_8000_NORMAL:
+    input: H264_HIGH_1920x1080_SDR_BT709_60p_YCBCR420_8000_NORMAL.es
+    codec: H264_AVC  # Video codec information, Refer `Codec` enum
+    codedWidth: 1920
+    codedHeight: 1088
+    colorDepth: 8
+    pixelFormat: YCBCR420
+    dynamic_range: SDR # com.rdk.hal.video.decoder.DynamicRange enum
+    scanType: PROGRESSIVE_FRAME
+    frameRateNumerator: 60 # Frame rate
+    frameRateDenominator: 1
+    endOfStream: 0
+    stop_start_pts: -1 # pts (ns) at which the decoder should stop/start
+    signal_discontinuity_pts: -1 # pts (ns) to signal discontinuity
+    flush_pts: -1 # pts (ns) to flush decoder
+    flush_reset_pts: -1 # pts (ns) to flush decoder with reset
+    eos_pts: -1 # pts (ns) to send EOS
+    discontinuity: 0
+    lowLatency: 0
+    bit_rate: 8000
+    no_of_frames: 9
+    decodeErrors: 0
+    framesDropped: 0
+    frame_size: # Compressed frame sizes in bytes
+      - 68
+      - 70
+      - 70
+      - 5649
+      - 4452
+      - 750
+      - 8344
+      - 1062
+      - 2048
+    PTS: # Presentation Time Stamps (nanoseconds) for 60 fps
+      - 00000000
+      - 16666667
+      - 33333334
+      - 50000001
+      - 66666668
+      - 83333335
+      - 100000002
+      - 116666669
+      - 133333336

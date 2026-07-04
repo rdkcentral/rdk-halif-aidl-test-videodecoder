@@ -1189,4 +1189,48 @@ VideoStreams:
       - 2252250
       - 2302300
       - 2352350
-
+  H265_HIGH_3840x2160_HDR10_BT2020_60p_YCBCR420_12000_NORMAL:
+    input: H265_HIGH_3840x2160_HDR10_BT2020_60p_YCBCR420_12000_NORMAL.es
+    codec: H265_HEVC  # Video codec information, Refer `Codec` enum
+    codedWidth: 3840
+    codedHeight: 2160
+    colorDepth: 10
+    pixelFormat: YCBCR420
+    dynamic_range: HDR10 # com.rdk.hal.video.decoder.DynamicRange enum
+    scanType: PROGRESSIVE_FRAME
+    frameRateNumerator: 60 # Frame rate
+    frameRateDenominator: 1
+    endOfStream: 0
+    stop_start_pts: -1 # pts (ns) to stop/start decoder
+    signal_discontinuity_pts: -1 # pts (ns) to signal discontinuity
+    flush_pts: -1 # pts (ns) to flush decoder
+    flush_reset_pts: -1 # pts (ns) to flush decoder with reset
+    eos_pts: -1 # pts (ns) to send EOS
+    discontinuity: 0
+    lowLatency: 0
+    bit_rate: 12000
+    no_of_frames: 10
+    decodeErrors: 0
+    framesDropped: 0
+    frame_size: # Compressed frame sizes in bytes
+      - 4399
+      - 150
+      - 148
+      - 271
+      - 3810
+      - 5763
+      - 314
+      - 714
+      - 403
+      - 9740
+    PTS: # Presentation Time Stamps (nanoseconds) for 60 fps
+      - 00000000
+      - 16666667
+      - 33333334
+      - 50000001
+      - 66666668
+      - 83333335
+      - 100000002
+      - 116666669
+      - 133333336
+      - 150000003
