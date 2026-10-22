@@ -48,11 +48,27 @@
 #include <chrono>
 #include <filesystem>
 #include <limits>
+#include <cstring> // For memcmp()
 #include <unistd.h> // For getpid()
 #include <sys/syscall.h> // For syscall(SYS_gettid)
 
 using namespace std::chrono;
 using namespace std;
+
+/**
+ * @brief Returns the offset of the next start code after @p offset, or @p fileSize if none.
+ */
+static uint64_t findNextStartCode(const std::vector<uint8_t>& inputBuffer, uint64_t fileSize, uint64_t offset)
+{
+    for (uint64_t pos = offset + 3; pos + 3 <= fileSize; ++pos)
+    {
+        if (inputBuffer[pos] == 0 && inputBuffer[pos + 1] == 0 && inputBuffer[pos + 2] == 1)
+        {
+            return (inputBuffer[pos - 1] == 0 && pos - 1 > offset) ? pos - 1 : pos;
+        }
+    }
+    return fileSize;
+}
 
 std::vector<std::tuple<uint64_t, uint32_t, int64_t>> videoDecoderTest::parseFrames(const std::vector<uint8_t>& inputBuffer, uint64_t fileSize, com::rdk::hal::videodecoder::Codec codec)
 {
@@ -134,38 +150,58 @@ std::vector<std::tuple<uint64_t, uint32_t, int64_t>> videoDecoderTest::parseFram
             }
             break;
         }
-        case com::rdk::hal::videodecoder::Codec::VP9: {
-            uint64_t pos = 32; // Skip IVF header (fixed 32 bytes)
-            size_t frameIndex = 0;
-            while (pos + 12 <= fileSize) {
-                uint32_t frameSize = (uint32_t)inputBuffer[pos] |
-                                     ((uint32_t)inputBuffer[pos + 1] << 8) |
-                                     ((uint32_t)inputBuffer[pos + 2] << 16) |
-                                     ((uint32_t)inputBuffer[pos + 3] << 24);
-                uint64_t timestamp = static_cast<uint64_t>(inputBuffer[pos + 4]) |
-                                     (static_cast<uint64_t>(inputBuffer[pos + 5]) << 8) |
-                                     (static_cast<uint64_t>(inputBuffer[pos + 6]) << 16) |
-                                     (static_cast<uint64_t>(inputBuffer[pos + 7]) << 24) |
-                                     (static_cast<uint64_t>(inputBuffer[pos + 8]) << 32) |
-                                     (static_cast<uint64_t>(inputBuffer[pos + 9]) << 40) |
-                                     (static_cast<uint64_t>(inputBuffer[pos + 10]) << 48) |
-                                     (static_cast<uint64_t>(inputBuffer[pos + 11]) << 56);
-
-                uint64_t frameStart = pos + 12;
-                if (frameStart + frameSize > fileSize) break;
-
-                int64_t pts = (frameIndex < mTestConfiguration.frameDetails.size()) ?
-                              std::get<1>(mTestConfiguration.frameDetails[frameIndex]) :
-                              static_cast<int64_t>(timestamp); // Use IVF timestamp
-                frames.emplace_back(frameStart, frameSize, pts);
-                UT_LOG_INFO("VP9 IVF frame: offset=%llu, size=%u, pts=%lld", frameStart, frameSize, pts);
-
-                pos = frameStart + frameSize;
-                frameIndex++;
-            }
-            break;
-        }
+        case com::rdk::hal::videodecoder::Codec::VP9:
         case com::rdk::hal::videodecoder::Codec::AV1: {
+            const bool isVp9 = (codec == com::rdk::hal::videodecoder::Codec::VP9);
+            const char* codecName = isVp9 ? "VP9" : "AV1";
+            // VP9 streams are always IVF; AV1 streams may be IVF ("DKIF" signature) or raw OBUs.
+            const bool isIvf = isVp9 || (fileSize >= 32 && memcmp(inputBuffer.data(), "DKIF", 4) == 0);
+            if (isIvf) {
+                uint64_t pos = 32; // Skip IVF header (fixed 32 bytes)
+                size_t frameIndex = 0;
+                while (pos + 12 <= fileSize) {
+                    uint32_t frameSize = (uint32_t)inputBuffer[pos] |
+                                         ((uint32_t)inputBuffer[pos + 1] << 8) |
+                                         ((uint32_t)inputBuffer[pos + 2] << 16) |
+                                         ((uint32_t)inputBuffer[pos + 3] << 24);
+                    uint64_t timestamp = static_cast<uint64_t>(inputBuffer[pos + 4]) |
+                                         (static_cast<uint64_t>(inputBuffer[pos + 5]) << 8) |
+                                         (static_cast<uint64_t>(inputBuffer[pos + 6]) << 16) |
+                                         (static_cast<uint64_t>(inputBuffer[pos + 7]) << 24) |
+                                         (static_cast<uint64_t>(inputBuffer[pos + 8]) << 32) |
+                                         (static_cast<uint64_t>(inputBuffer[pos + 9]) << 40) |
+                                         (static_cast<uint64_t>(inputBuffer[pos + 10]) << 48) |
+                                         (static_cast<uint64_t>(inputBuffer[pos + 11]) << 56);
+
+                    uint64_t frameStart = pos + 12;
+                    if (frameStart + frameSize > fileSize) break;
+
+                    int64_t pts = (frameIndex < mTestConfiguration.frameDetails.size()) ?
+                                  std::get<1>(mTestConfiguration.frameDetails[frameIndex]) :
+                                  static_cast<int64_t>(timestamp); // Use IVF timestamp
+
+                    // Error frame: send the smaller YAML size; the next frame still starts at the real size.
+                    // VP9 only: the AV1 YAML frame sizes do not match the IVF frames, so AV1 frames are sent whole.
+                    uint32_t sendSize = frameSize;
+                    if (isVp9 && frameIndex < mTestConfiguration.frameDetails.size())
+                    {
+                        int32_t yamlSize = std::get<0>(mTestConfiguration.frameDetails[frameIndex]);
+                        if (yamlSize > 0 && static_cast<uint32_t>(yamlSize) < frameSize)
+                        {
+                            UT_LOG_INFO("VP9 truncated frame %zu: sending %d of %u bytes", frameIndex, yamlSize, frameSize);
+                            sendSize = static_cast<uint32_t>(yamlSize);
+                        }
+                    }
+                    frames.emplace_back(frameStart, sendSize, pts);
+                    UT_LOG_INFO("%s IVF frame: offset=%llu, size=%u, pts=%lld", codecName, frameStart, sendSize, pts);
+
+                    pos = frameStart + frameSize;
+                    frameIndex++;
+                }
+                break;
+            }
+
+            // Raw AV1 OBU stream (no IVF container).
             uint64_t pos = 0;
             size_t frameIndex = 0;
             while (pos < fileSize) {
@@ -287,7 +323,20 @@ bool videoDecoderTest::makeFrame()
             mFrameData.emplace_back(offset, size, pts, isErrorFrame);
             UT_LOG_DEBUG("Codec:%d Frame from frameDetails: offset=%llu, size=%u, pts=%lld, errorFrame=%d",
                         mTestConfiguration.codec, offset, size, pts, isErrorFrame);
-            offset += size;
+
+            // Error frame: skip to the real start of the next frame, so later frames stay aligned.
+            uint64_t nextStart = findNextStartCode(mInputBuffer, fileSize, offset);
+            uint64_t realSize = nextStart - offset;
+            if (nextStart < fileSize && static_cast<uint64_t>(size) < realSize)
+            {
+                UT_LOG_INFO("Codec:%d Truncated frame at offset=%llu: sending %u of %llu bytes",
+                            mTestConfiguration.codec, offset, size, realSize);
+                offset += realSize;
+            }
+            else
+            {
+                offset += size;
+            }
         }
     }
     else
