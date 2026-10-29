@@ -398,6 +398,16 @@ public:
         int activeDecoders = 0;
         int decodersWithBackPressure = 0;
 
+        // Use a real stream so the decoder actually queues the input instead of rejecting it.
+        vector<videoDecoderTestConfiguration_t> testConfiguration;
+        UT_status_t status = vts_videodecoder_parse_testconfig(gVideoDecoderTestConfiguration, VIDEODECODERMGR, gTestGroup,
+                                                               "Decode_BackPressure_Callback", testConfiguration);
+        if (status != UT_STATUS_OK || testConfiguration.empty())
+        {
+            UT_ASSERT_TRUE(false) << "Test configuration parsing failed for Decode_BackPressure_Callback";
+            return;
+        }
+
         for (const auto& [_decoderId, decoderHandle, controlListener, eventListener, capabilities] : mVideoDecoderList)
         {
             if (!decoderHandle || !capabilities || capabilities->supportedCodecs.empty())
@@ -406,16 +416,20 @@ public:
                 continue;
             }
 
-            activeDecoders++;
+            auto config = std::find_if(testConfiguration.begin(), testConfiguration.end(),
+                                       [&](const videoDecoderTestConfiguration_t& c)
+                                       { return checkDecoderSupportsConfig(_decoderId, capabilities, c, false); });
+            if (config == testConfiguration.end())
+            {
+                UT_LOG_WARNING("[DecoderID: %d] No supported stream for callback test, skipping", _decoderId.value);
+                continue;
+            }
 
-            videoDecoderTestConfiguration_t config = {};
-            config.codec = capabilities->supportedCodecs.front().codec;
-            config.openWithResolutionWidth = -1;
-            config.openWithResolutionHeight = -1;
+            activeDecoders++;
 
             videoDecoderTest decodeTest(_decoderId, decoderHandle, controlListener,
                                         eventListener, mAVBufferManager, false,
-                                        false, std::move(config), mAVbufferHelper, false);
+                                        false, *config, mAVbufferHelper, false);
 
             if (decodeTest.runBackPressureTest())
             {
