@@ -165,12 +165,33 @@ public:
         android::binder::Status status = gVideoDecoderManager->getSupportedOperationalModes(&supportedModes);
 
         if (!status.isOk()) {
-            UT_LOG_WARNING("Failed to query supported operational modes");
+            UT_ASSERT_TRUE(status.isOk())
+                 << "Failed to query supported operational modes: " << status.exceptionMessage().c_str();
             return false;
         }
 
         for (const auto& mode : supportedModes) {
             if (mode == OperationalMode::TUNNELLED) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool isNonTunnelModeSupported() const
+    {
+        // Check if any decoder supports non-tunnel mode by querying the manager
+        std::vector<OperationalMode> supportedModes;
+        android::binder::Status status = gVideoDecoderManager->getSupportedOperationalModes(&supportedModes);
+
+        if (!status.isOk()) {
+            UT_ASSERT_TRUE(status.isOk())
+                 << "Failed to query supported operational modes: " << status.exceptionMessage().c_str();
+            return false;
+        }
+
+        for (const auto& mode : supportedModes) {
+            if (mode == OperationalMode::NON_TUNNELLED) {
                 return true;
             }
         }
@@ -328,6 +349,12 @@ public:
         if (tunnelMode && !isTunnelModeSupported()) {
             UT_LOG_INFO("Skipping test '%s': Tunnel mode is not supported by this system", testName);
             GTEST_SKIP() << "Tunnel mode is not supported by this system";
+            return;
+        }
+
+        if (!tunnelMode && !isNonTunnelModeSupported()) {
+            UT_LOG_INFO("Skipping test '%s': Non-tunnel mode is not supported by this system", testName);
+            GTEST_SKIP() << "Non-tunnel mode is not supported by this system";
             return;
         }
 
