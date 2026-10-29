@@ -280,7 +280,7 @@ The class overrides `SetUp()` and `TearDown()` from `UTCore` to handle initializ
 | 2 | `TearDown` | None | Cleans up by unregistering event listeners and clearing `mVideoDecoderList`. | `unregisterEventListener()` |
 | 3 | `runSequentialDecode` | `testConfiguration_t& testConfig`<br>`bool secureDecode`<br>`bool tunnelMode`<br>`bool concurrentDecodeConsume` | Decodes streams sequentially using `DecoderTest` for each supported decoder, validating codec support and heap metrics. | `getHeapMetrics()` |
 | 4 | `runConcurrentDecode` | `testConfiguration_t& testConfig`<br>`bool secureDecode`<br>`bool tunnelMode`<br>`bool concurrentDecodeConsume` | Launches multiple threads to decode streams concurrently using `DecoderTest`, validating frame counts, errors, and heap metrics. | `getHeapMetrics()` |
-| 5 | `runTest` | `char* testName`<br>`bool secureMode`<br>`bool tunnelMode`<br>`bool concurrentMode` | Parses test configurations and invokes `runConcurrentDecode` or `runSequentialDecode` based on `concurrentMode`. | None |
+| 5 | `runTest` | `char* testName`<br>`bool secureMode`<br>`bool tunnelMode`<br>`bool concurrentMode` | Checks that the requested operational mode and secure-decoding capability are supported. Unsupported tunnelled, non-tunnelled, or secure tests are reported as skipped; otherwise, parses test configurations and invokes `runConcurrentDecode` or `runSequentialDecode` based on `concurrentMode`. | `getSupportedOperationalModes()` |
 
 ### SetUp
 
@@ -837,5 +837,4 @@ This validation ensures that metadata for each decoded frame matches the expecte
     D->>H: close()
 
 ```
-
 
