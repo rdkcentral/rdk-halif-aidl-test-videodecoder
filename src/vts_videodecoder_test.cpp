@@ -897,9 +897,14 @@ bool videoDecoderTest::runBackPressureTest()
         // while every earlier buffer was accepted.
         UT_ASSERT_EQUAL(callbackBaseline, 0) << "onDecodeBufferAvailable fired before any buffer was refused";
 
-        // Release the held output frames so the decoder can drain its input queue.
-        freeOutputFrames();
-        callbackObserved = mControlListener->waitForDecodeBufferAvailable(callbackBaseline + 1, std::chrono::milliseconds(5000));
+        // Release held output frames so the decoder can drain its input queue. Keep draining while
+        // waiting, since newly decoded frames would otherwise refill the output pool and stall it again.
+        const auto callbackDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
+        do
+        {
+            freeOutputFrames();
+            callbackObserved = mControlListener->waitForDecodeBufferAvailable(callbackBaseline + 1, std::chrono::milliseconds(50));
+        } while (!callbackObserved && std::chrono::steady_clock::now() < callbackDeadline);
         UT_ASSERT_TRUE(callbackObserved) << "onDecodeBufferAvailable was not received after back-pressure";
 
         if (callbackObserved)
