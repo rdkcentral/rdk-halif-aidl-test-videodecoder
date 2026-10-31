@@ -33,7 +33,7 @@
 This document provides an overview of the testing requirements for the Video Decoder module. It outlines the scope of testing, objectives, testing levels and approaches, specific test requirements.
 
 
-- `HAL` Interface Header [Interface Header](https://github.com/rdkcentral/rdk-halif-aidl/tree/v0.7/videodecoder/current/com/rdk/hal/videodecoder)
+- `HAL` Interface Header [Interface Header](https://github.com/rdkcentral/rdk-halif-aidl/tree/0.23.0/videodecoder/0.3.0.0/com/rdk/hal/videodecoder)
 - `HAL` specification documentation in this link - [Video Decoder HAL Specification info](https://rdkcentral.github.io/rdk-halif-aidl/halif/video_decoder/current/video_decoder/)
 
 
@@ -50,7 +50,7 @@ The output of an video decoder can take two routes:
 
 - List of video test streams: [Video TestStreams](VideoDecoder_TestStreamsInfo.md)
 
-- Each Test should refer [vts_l3_test_config.yaml](../../test_configuration/vts_l3_test_config.yaml) for the streams and information like `PTS`, frame sizes for the test.
+- Each Test should refer [vts_l3_test_config.yaml](../../videodecoder_test_configuration/vts_l3_VideoDecoder_test_config.yaml) for the streams and information like `PTS`, frame sizes for the test.
 
 ### L2 Test Specification
 
@@ -67,6 +67,25 @@ The output of an video decoder can take two routes:
 #### AV Buffer
 
 Video frames are supplied to the Video Decoder during testing, which necessitates a pre-validated AVBuffer module. Therefore, the AVBuffer must successfully pass VTS L1, L2, and L3 testing before being used in the Video Decoder tests
+
+### Platform-selected decoding
+
+With AIDL 0.23.0, test names describe operations, not output or security modes.
+For each decoder, `Capabilities.supportsSecure` is passed to `open()` and used
+for input-buffer allocation and secure writes. After every `start()`, the test
+queries `IVideoDecoder.getCurrentOperationalMode()`; it never sets an output-mode
+property or skips tests based on a manager-level supported-mode list.
+
+- `NON_TUNNELLED`: `onFrameOutput()` transfers a valid AVBuffer handle. The client
+  passes it to an attached sink or validates and frees it when no sink is attached.
+- `TUNNELLED`: `onFrameOutput()` carries `-1`. Output stays in the vendor layer;
+  the HAL delivers it to its sink and is responsible for buffer cleanup.
+
+Standalone L3 tests do not attach a sink. Both paths still validate PTS,
+metadata, EOS callbacks and metrics. Heap usage must return to its baseline
+after session close; concurrent tests check every heap used by participating decoders.
+Legacy tunnel/non-tunnel and secure/non-secure names have been consolidated.
+The stream lists and controls of those duplicate configurations were identical.
 
 ### Feature List
 
@@ -119,8 +138,8 @@ The following table outlines the core features validated in the L3 test phase
 
 |#|Testing Feature|Description|
 |-|---------------|-----------|
-|1|Tunnel/Non-Tunnel|Executes the decoder in tunnel mode or in non tunnel mode based on the property OPERATION_MODE set by the user. The test validates metrics, metadata and bufferHandle.|
-|2|Secure and Non-Secure|Initializes the decoder in secure mode, ensuring all buffer operations occur in secure memory|
+|1|Tunnel/Non-Tunnel|Queries the vendor-selected mode using getCurrentOperationalMode() after start(). The test validates metrics, metadata and bufferHandle.|
+|2|Secure and Non-Secure|Opens with secure=true when Capabilities.supportsSecure is true; otherwise uses non-secure input buffers|
 |3|Error Streams|Verifies decoder behavior with error streams. Ensures appropriate events are raised and frame metadata is updated accurately|
 |4|Codecs|Tests the decoder’s ability to decode all supported codec types per its capabilities, using input streams defined in the configuration file.|
 |5|Discontinuity|This test Verifies that the discontinuity signal is processed, ensuring subsequent frames decode without errors and metadata reflects the discontinuity.|
@@ -135,102 +154,39 @@ The following table outlines the core features validated in the L3 test phase
 |14| Adaptive Bitrate Streaming | Tests the decoder’s ability to decode Adaptive Bitrate Streams (ABR) with dynamic bitrate changes, as defined in the configuration fileTests the decoder’s ability to decode Adaptive Bitrate Streams (ABR) with dynamic bitrate changes, as defined in the configuration file.|
 |15|Concurrent decoding|Tests multiple decoders simultaneously, if supported, validating decoded outputs and their respective metrics (e.g., frame timing, error rates).|
 
-|#|Test|Tunnel|Secure|Error streams|CODEC|Discontinuity|EOS|Flush|Flush+Rest|Resolutions|HDR Modes|Frame Rates|GOP|Low Latency|Concurrency|
-|-|----|------|------|-------------|----|-------------|---|-----|----------|-----------|---------|-----------|---|-----------|-----------|
-|1|VDecode_Sequential_NonTunnel_NonSecure|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|2|VDecode_Sequential_NonTunnel_NonSecure_Error|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|3|VDecode_Sequential_NonTunnel_NonSecure_CODEC|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|4|VDecode_Sequential_NonTunnel_NonSecure_Discontinuity|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|5|VDecode_Sequential_NonTunnel_NonSecure_EOS|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|
-|6|VDecode_Sequential_NonTunnel_NonSecure_Flush|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|
-|7|VDecode_Sequential_NonTunnel_NonSecure_FlushReset|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|
-|8|VDecode_Sequential_NonTunnel_NonSecure_Resolutions|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|
-|9|VDecode_Sequential_NonTunnel_NonSecure_HDRModes|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|
-|10|VDecode_Sequential_NonTunnel_NonSecure_FrameRate|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|
-|11|VDecode_Sequential_NonTunnel_NonSecure_GOPStructure|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|
-|12|VDecode_Sequential_NonTunnel_NonSecure_LowLatency|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|
-|13|VDecode_Sequential_NonTunnel_Secure|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|14|VDecode_Sequential_NonTunnel_Secure_Error|✘|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|15|VDecode_Sequential_NonTunnel_Secure_CODEC|✘|✔|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|16|VDecode_Sequential_NonTunnel_Secure_Discontinuity|✘|✔|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|17|VDecode_Sequential_NonTunnel_Secure_EOS|✘|✔|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|
-|18|VDecode_Sequential_NonTunnel_Secure_Flush|✘|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|
-|19|VDecode_Sequential_NonTunnel_Secure_FlushReset|✘|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|
-|20|VDecode_Sequential_NonTunnel_Secure_Resolutions|✘|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|
-|21|VDecode_Sequential_NonTunnel_Secure_HDRModes|✘|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|
-|22|VDecode_Sequential_NonTunnel_Secure_FrameRate|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|
-|23|VDecode_Sequential_NonTunnel_Secure_GOPStructure|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|
-|24|VDecode_Sequential_NonTunnel_Secure_LowLatency|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|
-|25|VDecode_Sequential_Tunnel_NonSecure|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|26|VDecode_Sequential_Tunnel_NonSecure_Error|✔|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|27|VDecode_Sequential_Tunnel_NonSecure_CODEC|✔|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|28|VDecode_Sequential_Tunnel_NonSecure_Discontinuity|✔|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|29|VDecode_Sequential_Tunnel_NonSecure_EOS|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|
-|30|VDecode_Sequential_Tunnel_NonSecure_Flush|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|
-|31|VDecode_Sequential_Tunnel_NonSecure_FlushReset|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|
-|32|VDecode_Sequential_Tunnel_NonSecure_Resolutions|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|
-|33|VDecode_Sequential_Tunnel_NonSecure_HDRModes|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|
-|34|VDecode_Sequential_Tunnel_NonSecure_FrameRate|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|
-|35|VDecode_Sequential_Tunnel_NonSecure_GOPStructure|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|
-|36|VDecode_Sequential_Tunnel_NonSecure_LowLatency|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|
-|37|VDecode_Sequential_Tunnel_Secure|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|38|VDecode_Sequential_Tunnel_Secure_Error|✔|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|39|VDecode_Sequential_Tunnel_Secure_CODEC|✔|✔|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|40|VDecode_Sequential_Tunnel_Secure_Discontinuity|✔|✔|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|41|VDecode_Sequential_Tunnel_Secure_EOS|✔|✔|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|
-|42|VDecode_Sequential_Tunnel_Secure_Flush|✔|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|
-|43|VDecode_Sequential_Tunnel_Secure_FlushReset|✔|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|
-|44|VDecode_Sequential_Tunnel_Secure_Resolutions|✔|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|
-|45|VDecode_Sequential_Tunnel_Secure_HDRModes|✔|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|
-|46|VDecode_Sequential_Tunnel_Secure_FrameRate|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|
-|47|VDecode_Sequential_Tunnel_Secure_GOPStructure|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|
-|48|VDecode_Sequential_Tunnel_Secure_LowLatency|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|
-|49|VDecode_Concurrent_NonTunnel_NonSecure|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|50|VDecode_Concurrent_NonTunnel_NonSecure_Error|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|
-|51|VDecode_Concurrent_NonTunnel_NonSecure_CODEC|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|
-|52|VDecode_Concurrent_NonTunnel_NonSecure_Discontinuity|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|53|VDecode_Concurrent_NonTunnel_NonSecure_EOS|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✔|
-|54|VDecode_Concurrent_NonTunnel_NonSecure_Flush|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✔|
-|55|VDecode_Concurrent_NonTunnel_NonSecure_FlushReset|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✔|
-|56|VDecode_Concurrent_NonTunnel_NonSecure_Resolutions|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|57|VDecode_Concurrent_NonTunnel_NonSecure_HDRModes|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✔|
-|58|VDecode_Concurrent_NonTunnel_NonSecure_FrameRate|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✔|
-|59|VDecode_Concurrent_NonTunnel_NonSecure_GOPStructure|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✔
-|60|VDecode_Concurrent_NonTunnel_NonSecure_LowLatency|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✔|
-|61|VDecode_Concurrent_NonTunnel_Secure|✘|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|62|VDecode_Concurrent_NonTunnel_Secure_Error|✘|✔|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|63|VDecode_Concurrent_NonTunnel_Secure_CODEC|✘|✔|✘|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|64|VDecode_Concurrent_NonTunnel_Secure_Discontinuity|✘|✔|✘|✘|✔|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|65|VDecode_Concurrent_NonTunnel_Secure_EOS|✘|✔|✘|✘|✘|✔|✘|✘|✔|✘|✘|✘|✘|✔|
-|66|VDecode_Concurrent_NonTunnel_Secure_Flush|✘|✔|✘|✘|✘|✘|✔|✘|✔|✘|✘|✘|✘|✔|
-|67|VDecode_Concurrent_NonTunnel_Secure_FlushReset|✘|✔|✘|✘|✘|✘|✘|✔|✔|✘|✘|✘|✘|✔|
-|68|VDecode_Concurrent_NonTunnel_Secure_Resolutions|✘|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|69|VDecode_Concurrent_NonTunnel_Secure_HDRModes|✘|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✔|
-|70|VDecode_Concurrent_NonTunnel_Secure_FrameRate|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✔|
-|71|VDecode_Concurrent_NonTunnel_Secure_GOPStructure|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✔
-|72|VDecode_Concurrent_NonTunnel_Secure_LowLatency|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✔|
-|73|VDecode_Concurrent_Tunnel_NonSecure|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|74|VDecode_Concurrent_Tunnel_NonSecure_Error|✔|✘|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|75|VDecode_Concurrent_Tunnel_NonSecure_CODEC|✔|✘|✘|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|76|VDecode_Concurrent_Tunnel_NonSecure_Discontinuity|✔|✘|✘|✘|✔|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|77|VDecode_Concurrent_Tunnel_NonSecure_EOS|✔|✘|✘|✘|✘|✔|✘|✘|✔|✘|✘|✘|✘|✔|
-|78|VDecode_Concurrent_Tunnel_NonSecure_Flush|✔|✘|✘|✘|✘|✘|✔|✘|✔|✘|✘|✘|✘|✔|
-|79|VDecode_Concurrent_Tunnel_NonSecure_FlushReset|✔|✘|✘|✘|✘|✘|✘|✔|✔|✘|✘|✘|✘|✔|
-|80|VDecode_Concurrent_Tunnel_NonSecure_Resolutions|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|81|VDecode_Concurrent_Tunnel_NonSecure_HDRModes|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✔|
-|82|VDecode_Concurrent_Tunnel_NonSecure_FrameRate|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✔|
-|83|VDecode_Concurrent_Tunnel_NonSecure_GOPStructure|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✔
-|84|VDecode_Concurrent_Tunnel_NonSecure_LowLatency|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✔|
-|85|VDecode_Concurrent_Tunnel_Secure|✔|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|86|VDecode_Concurrent_Tunnel_Secure_Error|✔|✔|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|87|VDecode_Concurrent_Tunnel_Secure_CODEC|✔|✔|✘|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|88|VDecode_Concurrent_Tunnel_Secure_Discontinuity|✔|✔|✘|✘|✔|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|89|VDecode_Concurrent_Tunnel_Secure_EOS|✔|✔|✘|✘|✘|✔|✘|✘|✔|✘|✘|✘|✘|✔|
-|90|VDecode_Concurrent_Tunnel_Secure_Flush|✔|✔|✘|✘|✘|✘|✔|✘|✔|✘|✘|✘|✘|✔|
-|91|VDecode_Concurrent_Tunnel_Secure_FlushReset|✔|✔|✘|✘|✘|✘|✘|✔|✔|✘|✘|✘|✘|✔|
-|92|VDecode_Concurrent_Tunnel_Secure_Resolutions|✔|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|93|VDecode_Concurrent_Tunnel_Secure_HDRModes|✔|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✔|
-|94|VDecode_Concurrent_Tunnel_Secure_FrameRate|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✔|
-|95|VDecode_Concurrent_Tunnel_Secure_GOPStructure|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✔
-|96|VDecode_Concurrent_Tunnel_Secure_LowLatency|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✔|
+| # | Test | Execution | Configuration key |
+|---|------|-----------|-------------------|
+| 1 | `VDecode_BackPressure_Callback` | Sequential | `Decode_BackPressure_Callback` |
+| 2 | `VDecode_Concurrent` | Concurrent | `Decode_Concurrent` |
+| 3 | `VDecode_Concurrent_AdaptiveBitrate` | Concurrent | `Decode_Concurrent_AdaptiveBitrate` |
+| 4 | `VDecode_Concurrent_CODEC` | Concurrent | `Decode_Concurrent_CODEC` |
+| 5 | `VDecode_Concurrent_Discontinuity` | Concurrent | `Decode_Concurrent_Discontinuity` |
+| 6 | `VDecode_Concurrent_EOS` | Concurrent | `Decode_Concurrent_EOS` |
+| 7 | `VDecode_Concurrent_Error` | Concurrent | `Decode_Concurrent_Error` |
+| 8 | `VDecode_Concurrent_Flush` | Concurrent | `Decode_Concurrent_Flush` |
+| 9 | `VDecode_Concurrent_FlushReset` | Concurrent | `Decode_Concurrent_FlushReset` |
+| 10 | `VDecode_Concurrent_FrameRate` | Concurrent | `Decode_Concurrent_FrameRate` |
+| 11 | `VDecode_Concurrent_GOP` | Concurrent | `Decode_Concurrent_GOP` |
+| 12 | `VDecode_Concurrent_HDRModes` | Concurrent | `Decode_Concurrent_HDRModes` |
+| 13 | `VDecode_Concurrent_LowLatency` | Concurrent | `Decode_Concurrent_LowLatency` |
+| 14 | `VDecode_Sequential` | Sequential | `Decode_Sequential` |
+| 15 | `VDecode_Sequential_AdaptiveBitrate` | Sequential | `Decode_Sequential_AdaptiveBitrate` |
+| 16 | `VDecode_Sequential_CODEC` | Sequential | `Decode_Sequential_CODEC` |
+| 17 | `VDecode_Sequential_Discontinuity` | Sequential | `Decode_Sequential_Discontinuity` |
+| 18 | `VDecode_Sequential_Discontinuity_EOS` | Sequential | `Decode_Sequential_Discontinuity_EOS` |
+| 19 | `VDecode_Sequential_EOS` | Sequential | `Decode_Sequential_EOS` |
+| 20 | `VDecode_Sequential_Error` | Sequential | `Decode_Sequential_Error` |
+| 21 | `VDecode_Sequential_Error_Discontinuity` | Sequential | `Decode_Sequential_Error_Discontinuity` |
+| 22 | `VDecode_Sequential_Error_EOS` | Sequential | `Decode_Sequential_Error_EOS` |
+| 23 | `VDecode_Sequential_Flush` | Sequential | `Decode_Sequential_Flush` |
+| 24 | `VDecode_Sequential_FlushReset` | Sequential | `Decode_Sequential_FlushReset` |
+| 25 | `VDecode_Sequential_FlushReset_Error` | Sequential | `Decode_Sequential_FlushReset_Error` |
+| 26 | `VDecode_Sequential_Flush_Error` | Sequential | `Decode_Sequential_Flush_Error` |
+| 27 | `VDecode_Sequential_FrameRate` | Sequential | `Decode_Sequential_FrameRate` |
+| 28 | `VDecode_Sequential_GOP` | Sequential | `Decode_Sequential_GOP` |
+| 29 | `VDecode_Sequential_HDRModes` | Sequential | `Decode_Sequential_HDRModes` |
+| 30 | `VDecode_Sequential_LowLatency` | Sequential | `Decode_Sequential_LowLatency` |
+| 31 | `VDecode_Sequential_MetadataOverride_HDR` | Sequential | `Decode_Sequential_MetadataOverride_HDR` |
+| 32 | `VDecode_Sequential_MetadataOverride_PAR` | Sequential | `Decode_Sequential_MetadataOverride_PAR` |
+| 33 | `VDecode_Sequential_MetadataOverride_SSAI` | Sequential | `Decode_Sequential_MetadataOverride_SSAI` |
 

@@ -55,13 +55,6 @@ android::binder::Status VideoDecoderManager::getVideoDecoderIds(std::vector<IVid
     return android::binder::Status::ok();
 }
 
-android::binder::Status VideoDecoderManager::getSupportedOperationalModes(std::vector<OperationalMode>* _aidl_return) {
-    _aidl_return->push_back(OperationalMode::TUNNELLED);
-    _aidl_return->push_back(OperationalMode::NON_TUNNELLED);
-// _aidl_return->push_back(OperationalMode::GRAPHICS_TEXTURE);
-    return android::binder::Status::ok();
-}
-
 android::binder::Status VideoDecoderManager::getVideoDecoder(const IVideoDecoder::Id& decoderResourceId, android::sp<IVideoDecoder>* _aidl_return) {
     // Per IVideoDecoderManager.aidl: invalid ID returns null with EX_NONE, not an exception.
     if (decoderResourceId.value < 0 || decoderResourceId.value >= NUM_VIDEO_DECODER) {
@@ -82,7 +75,7 @@ VideoDecoder::VideoDecoder(IVideoDecoder::Id id) {
     this->mDecodeErrorPolicy = 0;
     this->mDecodeErrorPolicySet = false;
     this->mSha1Calc = 0;
-    this->mOperationalMode = static_cast<int32_t>(OperationalMode::NON_TUNNELLED);
+    this->mOperationalMode = static_cast<int32_t>(id.value == 0 ? OperationalMode::NON_TUNNELLED : OperationalMode::TUNNELLED);
     this->mSupportsSecure = 1;
     this->mMetricsFrameDecoded = 0;
     this->mMetricsDecodeErrors = 0;
@@ -108,6 +101,18 @@ void VideoDecoder::setState(State state) {
 State VideoDecoder::getState() {
     std::lock_guard<std::mutex> lock(mStateMutex);
     return mVideoDecoderState;
+}
+
+android::binder::Status VideoDecoder::getCurrentOperationalMode(OperationalMode* _aidl_return) {
+    if (!_aidl_return) {
+        LOG(ERROR) << "getCurrentOperationalMode: null output";
+        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
+    }
+    if (getState() != State::STARTED) {
+        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
+    }
+    *_aidl_return = static_cast<OperationalMode>(mOperationalMode);
+    return android::binder::Status::ok();
 }
 
 android::binder::Status VideoDecoder::getCapabilities(videodecoder::Capabilities* _aidl_return) {
@@ -218,10 +223,6 @@ android::binder::Status VideoDecoder::getProperty(videodecoder::Property propert
         case Property::SHA1_CALC:
             value.value = PropertyValue::Value::make<PropertyValue::Value::intValue>(mSha1Calc);
             LOG(DEBUG) << "getProperty: SHA1_CALC = " << mSha1Calc;
-            break;
-        case Property::OPERATIONAL_MODE:
-            value.value = PropertyValue::Value::make<PropertyValue::Value::intValue>(mOperationalMode);
-            LOG(DEBUG) << "getProperty: OPERATIONAL_MODE = " << mOperationalMode;
             break;
         case Property::SECURE_VIDEO:
             value.value = PropertyValue::Value::make<PropertyValue::Value::intValue>(mSupportsSecure);
@@ -570,10 +571,6 @@ android::binder::Status VideoDecoderController::validateDecodeBufferArgs(int64_t
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_ARGUMENT);
     }
     if (metadata.nsPresentationTime < 0) {
-        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_ARGUMENT);
-    }
-    /* metadata.discontinuity is reserved in v1 and MUST be false */
-    if (metadata.discontinuity) {
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_ARGUMENT);
     }
     return android::binder::Status::ok();
@@ -1164,18 +1161,6 @@ android::binder::Status VideoDecoderController::setProperty(videodecoder::Proper
                 return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_ARGUMENT);
             }
             mParentDecoder->mSha1Calc = intvalue;
-            break;
-        case Property::OPERATIONAL_MODE:
-            if (mParentDecoder->getState() != State::READY && mParentDecoder->getState() != State::STARTED) {
-                *_aidl_return = false;
-                return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
-            }
-            intvalue = propertyValue.value->get<PropertyValue::Value::Tag::intValue>();
-            if (intvalue < static_cast<int32_t>(OperationalMode::TUNNELLED) || intvalue > static_cast<int32_t>(OperationalMode::GRAPHICS_TEXTURE)) {
-                *_aidl_return = false;
-                return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_ARGUMENT);
-            }
-            mParentDecoder->mOperationalMode = intvalue;
             break;
         default:
             *_aidl_return = false;

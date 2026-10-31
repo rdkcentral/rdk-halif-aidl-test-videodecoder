@@ -25,7 +25,7 @@
 # Mirrors the mockservice's hardcoded getCapabilities() response
 # (vts_hal_test_components/videodecoder/mockservice/src/VideoDecoder.cpp)
 # so profile-declared capabilities match what the mock actually returns
-# at runtime. Codec/enum names validated against the videodecoder 0.2.0.0
+# at runtime. Codec/enum names validated against the videodecoder 0.3.0.0
 # interface pinned in rdk-halif-aidl/versions_released.yaml (== "current").
 #
 # supportedCodecs[].profiles is left empty: the mock never populates
@@ -41,9 +41,6 @@
 
 videodecoder:                   # Component object begins
   interfaceVersion: current
-  supportedOperationalModes:
-    - TUNNELLED
-    - NON_TUNNELLED
   IVideoDecoder:                # Resource list
     - 0:                        # Resource object begins
       supportedCodecs:          # Array of CodecCapabilities

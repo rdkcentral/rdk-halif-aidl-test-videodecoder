@@ -80,12 +80,10 @@ static const std::vector<videodecoder::Property> validIntPropertyReady = {
 
 // Properties writable in READY and STARTED
 static const std::vector<videodecoder::Property> validIntPropertyAll = {
-    videodecoder::Property::OPERATIONAL_MODE,
     videodecoder::Property::SHA1_CALC
 };
 
 // Define valid property values as standalone constants
-static const int32_t intValueOpModeTunnelled = static_cast<int32_t>(OperationalMode::TUNNELLED); // 0
 static const int32_t intValueSHA1On = 1;
 static const int32_t intValueLowLatencyOn = 1;
 static const int32_t intValueDecodeErrorConceal = 1;
@@ -228,53 +226,62 @@ UT_ADD_TEST(VTS_L1_VideoDecoder,getVideoDecoderIds_pos)
 
 
 /**
- * @brief Test to verify the retrieval of supported operational modes from the VideoDecoderManager.
- *
- * This test checks the functionality of the getSupportedOperationalModes API to ensure it correctly retrieves
- * the list of supported operational modes. It verifies that the API call is successful, the list is not empty,
- * and the modes match the expected configuration.
- *
- * **Test Group ID:** Basic: 01@n
- * **Test Case ID:** 002@n
- * **Priority:** High@n
- * @n
- * **Pre-Conditions:** None@n
- * **Dependencies:** None@n
- * **User Interaction:** None@n
- * @n
- * **Test Procedure:**@n
- * | Variation / Step | Description | Test Data | Expected Result | Notes |
- * | :----: | --------- | ---------- |-------------- | ----- |
- * | 01 | Initialize supportedModes vector to store operational modes. | supportedModes = empty vector | Should be successful | Should be successful |
- * | 02 | Call getSupportedOperationalModes to retrieve supported modes. | supportedModes = empty vector | status.isOk() = true, supportedModes not empty | Should Pass |
- * | 03 | Verify the size of supportedModes matches expected count from configuration. | supportedModes.size() = actual size, expectedCount = value from config | supportedModes.size() == expectedCount | Should Pass |
- * | 04 | Iterate through each expected mode and verify it exists in supportedModes. | expectedMode = value from config, supportedModes = list of modes | Each expectedMode found in supportedModes | Should Pass |
+ * @brief Verify the vendor-selected output mode in STARTED.
  */
-UT_ADD_TEST(VTS_L1_VideoDecoder, getSupportedOperationalModes_pos)
+UT_ADD_TEST(VTS_L1_VideoDecoder, getCurrentOperationalMode_pos)
 {
-    std::vector<videodecoder::OperationalMode> supportedModes;
-
-    VIDEODECODER_MANAGER_GETSUPPORTEDOPERATIONALMODES(supportedModes);
-
-    /* Build set of all operational modes from HFP profile */
-    std::unordered_set<videodecoder::OperationalMode> modesFromProfile;
-    for (const auto& decoder : gVideodecoders_hfp)
+    std::vector<IVideoDecoder::Id> decoderIds;
+    VIDEODECODER_MANAGER_GETVIDEODECODERIDS(decoderIds);
+    for (const auto& id : decoderIds)
     {
-        for (const auto& mode : decoder.supportedOperationalModes)
+        sp<IVideoDecoder> decoder;
+        VIDEODECODER_MANAGER_GETVIDEODECODER(id, decoder);
+        videodecoder::Capabilities capabilities;
+        VIDEODECODER_GETCAPABILITIES(decoder, &capabilities);
+        for (const auto& codec : capabilities.supportedCodecs)
         {
-            modesFromProfile.insert(mode);
+            sp<VideoDecoderControllerListener> listener = new VideoDecoderControllerListener();
+            sp<IVideoDecoderController> controller;
+            VIDEODECODER_OPEN_SUCCESS(decoder, codec.codec, capabilities.supportsSecure, listener, controller, true);
+            VIDEODECODER_START_SUCCESS(decoder, controller, true);
+            OperationalMode mode;
+            VIDEODECODER_GETCURRENTOPERATIONALMODE(decoder, mode);
+            VIDEODECODER_STOP_SUCCESS(decoder, controller, true);
+            VIDEODECODER_CLOSE_SUCCESS(decoder, controller, true);
         }
     }
+}
 
-    /* Verify the size matches */
-    UT_ASSERT_EQUAL(supportedModes.size(), modesFromProfile.size())
-        << "Mismatch in number of supported operational modes.";
-
-    /* Verify each mode from API is present in HFP profile */
-    for (const auto& mode : supportedModes)
+UT_ADD_TEST(VTS_L1_VideoDecoder, getCurrentOperationalMode_neg)
+{
+    std::vector<IVideoDecoder::Id> decoderIds;
+    VIDEODECODER_MANAGER_GETVIDEODECODERIDS(decoderIds);
+    for (const auto& id : decoderIds)
     {
-        UT_ASSERT_NOT_EQUAL(modesFromProfile.find(mode), modesFromProfile.end())
-            << "Operational mode " << static_cast<int>(mode) << " not found in HFP profile.";
+        sp<IVideoDecoder> decoder;
+        VIDEODECODER_MANAGER_GETVIDEODECODER(id, decoder);
+        auto checkInvalidState = [&]()
+        {
+            OperationalMode mode;
+            Status status = decoder->getCurrentOperationalMode(&mode);
+            UT_LOG_INFO("getCurrentOperationalMode outside STARTED: %s", status.toString8().c_str());
+            UT_ASSERT_FALSE(status.isOk());
+            UT_ASSERT_EQUAL(status.exceptionCode(), Status::EX_ILLEGAL_STATE);
+        };
+        checkInvalidState();
+        videodecoder::Capabilities capabilities;
+        VIDEODECODER_GETCAPABILITIES(decoder, &capabilities);
+        UT_ASSERT_FALSE_FATAL(capabilities.supportedCodecs.empty());
+        sp<VideoDecoderControllerListener> listener = new VideoDecoderControllerListener();
+        sp<IVideoDecoderController> controller;
+        VIDEODECODER_OPEN_SUCCESS(decoder, capabilities.supportedCodecs.front().codec,
+                                  capabilities.supportsSecure, listener, controller, true);
+        checkInvalidState();
+        VIDEODECODER_START_SUCCESS(decoder, controller, true);
+        VIDEODECODER_STOP_SUCCESS(decoder, controller, true);
+        checkInvalidState();
+        VIDEODECODER_CLOSE_SUCCESS(decoder, controller, true);
+        checkInvalidState();
     }
 }
 
@@ -471,7 +478,7 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getCapabilities_pos)
 /**
  * @brief Test the positive scenario of retrieving properties from VideoDecoder
  *
- * This test verifies the ability of the VideoDecoder to correctly retrieve various properties such as RESOURCE_ID, OPERATIONAL_MODE, SECURE_VIDEO, and METRIC_FRAMES_DECODED. It ensures that the decoder returns the expected property values without any errors.
+ * This test verifies the ability of the VideoDecoder to correctly retrieve various properties such as RESOURCE_ID, SECURE_VIDEO, and METRIC_FRAMES_DECODED. It ensures that the decoder returns the expected property values without any errors.
  *
  * **Test Group ID:** Basic: 01@n
  * **Test Case ID:** 006@n
@@ -486,7 +493,6 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getCapabilities_pos)
  * | :----: | --------- | ---------- |-------------- | ----- |
  * | 01 | Initialize the test environment and iterate over each decoder | decoders = list of decoders | Should be successful | |
  * | 02 | Call getProperty with RESOURCE_ID and check the result | property = RESOURCE_ID, aidl_return = optional | status.isOk() = true, aidl_return.has_value() = true, aidl_return->value->getTag() = intValue | Should Pass |
- * | 03 | Call getProperty with OPERATIONAL_MODE and check the result | property = OPERATIONAL_MODE, aidl_return = optional | status.isOk() = true, aidl_return.has_value() = true, aidl_return->value->getTag() = intValue | Should Pass |
  * | 04 | Call getProperty with SECURE_VIDEO and check the result | property = SECURE_VIDEO, aidl_return = optional | status.isOk() = true, aidl_return.has_value() = true, aidl_return->value->getTag() = intValue | Should Pass |
  * | 05 | Call getProperty with METRIC_FRAMES_DECODED and check the result | property = METRIC_FRAMES_DECODED, aidl_return = optional | status.isOk() = true, aidl_return.has_value() = true, aidl_return->value->getTag() = intValue | Should Pass |
  */
@@ -522,11 +528,6 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getCapabilities_pos)
         VIDEODECODER_GETPROPERTY(decoder, videodecoder::Property::OUTPUT_FRAME_POOL_SIZE, aidl_return);
         UT_ASSERT_TRUE(vts_videodecoder_helper_validatePropertyValue(decoder_id, aidl_return,
             videodecoder::Property::OUTPUT_FRAME_POOL_SIZE)) << "OUTPUT_FRAME_POOL_SIZE validation failed";
-
-        // Test OPERATIONAL_MODE
-        VIDEODECODER_GETPROPERTY(decoder, videodecoder::Property::OPERATIONAL_MODE, aidl_return);
-        UT_ASSERT_TRUE(vts_videodecoder_helper_validatePropertyValue(decoder_id, aidl_return,
-            videodecoder::Property::OPERATIONAL_MODE)) << "OPERATIONAL_MODE validation failed";
 
         // Test LOW_LATENCY_MODE
         VIDEODECODER_GETPROPERTY(decoder, videodecoder::Property::LOW_LATENCY_MODE, aidl_return);
@@ -634,7 +635,7 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getProperty_neg) {
  * **Test Procedure:**@n
  * | Variation / Step | Description | Test Data | Expected Result | Notes |
  * | :----: | --------- | ---------- |-------------- | ----- |
- * | 01 | Initialize the propertyKVList with valid properties | propertyKVList initialized with RESOURCE_ID, INPUT_QUEUE_DEPTH, OUTPUT_FRAME_POOL_SIZE, OPERATIONAL_MODE, SECURE_VIDEO, METRIC_FRAMES_DECODED, METRIC_DECODE_ERRORS, METRIC_FRAMES_DROPPED | Properties should be initialized successfully | Should be successful |
+ * | 01 | Initialize the propertyKVList with valid properties | propertyKVList initialized with RESOURCE_ID, INPUT_QUEUE_DEPTH, OUTPUT_FRAME_POOL_SIZE, SECURE_VIDEO, METRIC_FRAMES_DECODED, METRIC_DECODE_ERRORS, METRIC_FRAMES_DROPPED | Properties should be initialized successfully | Should be successful |
  * | 02 | Call getPropertyMulti with the initialized propertyKVList | IN: propertyKVList, OUT: _aidl_return | Status should be OK, _aidl_return should be true | Should Pass |
  * | 03 | Verify each PropertyKVPair in the list has its propertyValue correctly populated | propertyKVList | Each propertyValue should have a value | Should be successful |
  */
@@ -664,7 +665,6 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getProperty_neg) {
         VIDEODECODER_ADD_PROPERTY(properties, RESOURCE_ID);
         VIDEODECODER_ADD_PROPERTY(properties, INPUT_QUEUE_DEPTH);
         VIDEODECODER_ADD_PROPERTY(properties, OUTPUT_FRAME_POOL_SIZE);
-        VIDEODECODER_ADD_PROPERTY(properties, OPERATIONAL_MODE);
         VIDEODECODER_ADD_PROPERTY(properties, SECURE_VIDEO);
         VIDEODECODER_ADD_PROPERTY(properties, METRIC_FRAMES_DECODED);
         VIDEODECODER_ADD_PROPERTY(properties, METRIC_DECODE_ERRORS);
@@ -1671,7 +1671,7 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, stop_neg)
  * | Variation / Step | Description | Test Data | Expected Result | Notes |
  * | :----: | --------- | ---------- |-------------- | ----- |
  * | 01 | Ensure the decoder is in the READY state | controller = current controller, currentState = READY | currentState should be READY | Should be successful |
- * | 02 | Set Operational Mode to NON_TUNNELLED | property = OPERATIONAL_MODE, propertyValue = NON_TUNNELLED, result = false | status.isOk() should be true, result should be true | Should Pass |
+ * | 02 | Set supported writable properties in READY and STARTED | property = SHA1_CALC, propertyValue = 1 | status.isOk() should be true, result should be true | Should Pass |
  * | 03 | Set Low Latency Mode to ON | property = LOW_LATENCY_MODE, propertyValue = ON, result = false | status.isOk() should be true, result should be true | Should Pass |
  * | 04 | Set Decode Error Policy to Conceal Corrupt Frames | property = DECODE_ERROR_POLICY, propertyValue = Conceal Corrupt Frames, result = false | status.isOk() should be true, result should be true | Should Pass |
  * | 05 | Set AV Source to AVUNKNOWN | property = AV_SOURCE, propertyValue = AVUNKNOWN, result = false | status.isOk() should be true, result should be true | Should Pass |
@@ -1684,15 +1684,11 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, setProperty_pos)
     std::vector<IVideoDecoder::Id> decoderIds;
     android::sp<IVideoDecoder> videoDecoder;
     videodecoder::Capabilities capabilities;
-    std::vector<videodecoder::OperationalMode> supportedModes;
 
     /* Get the Video decoder IDs */
     VIDEODECODER_MANAGER_GETVIDEODECODERIDS(decoderIds);
     UT_LOG_INFO("Found %zu video decoder IDs", decoderIds.size());
     UT_ASSERT_TRUE(!decoderIds.empty());
-
-    /*Get Supported Operationl Modes*/
-    VIDEODECODER_MANAGER_GETSUPPORTEDOPERATIONALMODES(supportedModes);
 
     for (const auto& _decoderId : decoderIds)
     {
@@ -1741,14 +1737,6 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, setProperty_pos)
                 {videodecoder::Property::SHA1_CALC, 0}  // Off
             };
 
-            /* Operational modes setting*/
-            for (const auto& _supportedModes : supportedModes)
-            {
-                readyIntProps.push_back({videodecoder::Property::OPERATIONAL_MODE, static_cast<int32_t>(_supportedModes)});
-                readyIntPropsAgain.push_back({videodecoder::Property::OPERATIONAL_MODE, static_cast<int32_t>(_supportedModes)});
-                startedIntProps.push_back({videodecoder::Property::OPERATIONAL_MODE, static_cast<int32_t>(_supportedModes)});
-            }
-
             /* Set properties in READY state */
             VIDEODECODER_SETPROPERTY_LIST_SUCCESS(videoDecoderController, readyIntProps, intValue);
 
@@ -1787,7 +1775,6 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, setProperty_pos)
  * | Variation / Step | Description | Test Data | Expected Result | Notes |
  * | :----: | --------- | ---------- |-------------- | ----- |
  * | 01 | Check if VideoDecoderController is available for testing | controllers.empty() | Should be false | Should be successful |
- * | 02 | Set Operational Mode to an Unsupported Mode | property = OPERATIONAL_MODE, propertyValue = 999 | result = false, status.isOk() = false | Should Fail |
  * | 03 | Set Property in Invalid State | property = LOW_LATENCY_MODE, propertyValue = 1 | result = false, status.isOk() = false | Should Fail |
  * | 04 | Set Property with Invalid Value Type | property = DECODE_ERROR_POLICY, propertyValue = "invalid" | result = false, status.isOk() = false | Should Fail |
  * | 05 | Set Property with Out-of-Range Value | property = SHA1_CALC, propertyValue = 999 | result = false, status.isOk() = false | Should Fail |
@@ -1945,22 +1932,18 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, decodeBufferWithMetadata_neg)
 
             // Invalid State - Decoder Not Started
             VIDEODECODER_DECODEBUFFER_WITH_METADATA_FAILURE(videoDecoderController, 3000000, 1,
-                                                            false, Status::EX_ILLEGAL_STATE);
+                                                            Status::EX_ILLEGAL_STATE);
 
             /* Start the Decoder */
             VIDEODECODER_START_SUCCESS(videoDecoder, videoDecoderController, true);
 
             // Invalid Buffer Handle
             VIDEODECODER_DECODEBUFFER_WITH_METADATA_FAILURE(videoDecoderController, 4000000, -1,
-                                                            false, Status::EX_ILLEGAL_ARGUMENT);
+                                                            Status::EX_ILLEGAL_ARGUMENT);
 
             // Invalid nsPresentationTime
             VIDEODECODER_DECODEBUFFER_WITH_METADATA_FAILURE(videoDecoderController, -1000000, 1,
-                                                            false, Status::EX_ILLEGAL_ARGUMENT);
-
-            // Reserved discontinuity in metadata must be rejected in v1
-            VIDEODECODER_DECODEBUFFER_WITH_METADATA_FAILURE(videoDecoderController, 5000000, 1,
-                                                            true, Status::EX_ILLEGAL_ARGUMENT);
+                                                            Status::EX_ILLEGAL_ARGUMENT);
 
             //Reverting state to READY
             VIDEODECODER_STOP_SUCCESS(videoDecoder, videoDecoderController, true);

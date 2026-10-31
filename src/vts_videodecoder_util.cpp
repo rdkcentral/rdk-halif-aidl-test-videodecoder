@@ -210,21 +210,6 @@ ScanType videoDecoderStringToScanType(const std::string& scanTypeStr) {
     return (it != scanTypeMap.end()) ? it->second : ScanType::PROGRESSIVE_FRAME; // Default fallback
 }
 
-OperationalMode videoDecoderStringToOperationalMode(const std::string& modeStr) {
-    static const std::unordered_map<std::string, OperationalMode> modeMap = {
-        {"TUNNELLED", OperationalMode::TUNNELLED},
-        {"NON_TUNNELLED", OperationalMode::NON_TUNNELLED},
-        {"GRAPHICS_TEXTURE", OperationalMode::GRAPHICS_TEXTURE}
-    };
-
-    auto it = modeMap.find(modeStr);
-    if (it != modeMap.end()) {
-        return it->second;  // Return the integer value instead of enum
-    } else {
-        return OperationalMode::TUNNELLED;  // Return TUNNELLED for unknown/default modes
-    }
-}
-
 videodecoder::CodecProfile videoDecoderStringToCodecProfile(const std::string& profileStr) {
     static const std::unordered_map<std::string, videodecoder::CodecProfile> profileMap = {
         // MPEG-2 Profiles
@@ -410,15 +395,6 @@ bool vts_videodecoder_helper_validatePropertyValue(int decoder_id,const std::opt
             return std::holds_alternative<int32_t>(val) && std::get<int32_t>(val) >= 0;  // Non-negative size
         case videodecoder::Property::OUTPUT_FRAME_POOL_SIZE:
             return std::holds_alternative<int32_t>(val) && std::get<int32_t>(val) >= 0;  // Non-negative size
-        case videodecoder::Property::OPERATIONAL_MODE:
-            return std::holds_alternative<int32_t>(val) &&(std::get<int32_t>(val) == static_cast<int32_t>(OperationalMode::TUNNELLED) ||
-                std::get<int32_t>(val) == static_cast<int32_t>(OperationalMode::NON_TUNNELLED) ||
-                std::get<int32_t>(val) == static_cast<int32_t>(OperationalMode::GRAPHICS_TEXTURE) ||
-                // Check for valid OR combinations (GRAPHICS_TEXTURE with TUNNELLED or NON_TUNNELLED)
-                std::get<int32_t>(val) == (static_cast<int32_t>(OperationalMode::TUNNELLED) |
-                static_cast<int32_t>(OperationalMode::GRAPHICS_TEXTURE)) ||
-                std::get<int32_t>(val) == (static_cast<int32_t>(OperationalMode::NON_TUNNELLED) |
-                static_cast<int32_t>(OperationalMode::GRAPHICS_TEXTURE)));
         case videodecoder::Property::LOW_LATENCY_MODE:
             return std::holds_alternative<int32_t>(val) && (std::get<int32_t>(val) == 0 || std::get<int32_t>(val) == 1);
         case videodecoder::Property::DECODE_ERROR_POLICY:
@@ -454,9 +430,7 @@ void vts_videodecoder_get_available_id(std::vector<int32_t> &availableIds)
 UT_status_t vts_videodecoder_parseVideoDecoderHFP()
 {
     std::string videodecoderpath = VIDEODECODERMGR_IVIDEODECODER;
-    std::string opmodepath = VIDEODECODERMGR_SUPPORTED_OPERATIONAL_MODES;
     int32_t number_of_videodecoders;
-    int32_t supportedopmode_count;
     decoder_t temporary = {};
 
     UT_LOG_INFO("Parsing HFP from: %s", videodecoderpath.c_str());
@@ -469,41 +443,8 @@ UT_status_t vts_videodecoder_parseVideoDecoderHFP()
         return UT_STATUS_FAILURE;
     }
 
-    supportedopmode_count = UT_KVP_PROFILE_GET_LIST_COUNT(opmodepath.c_str());
-    UT_LOG_INFO("Operational modes count: %d", supportedopmode_count);
-    if (supportedopmode_count <= 0)
-    {
-        UT_LOG_ERROR("No operational modes found at path: %s", opmodepath.c_str());
-        return UT_STATUS_FAILURE;
-    }
-
-    temporary.supportedOperationalModes.clear();
-    for (int32_t j = 0; j < supportedopmode_count; ++j)
-    {
-        char result_kvp[UT_KVP_MAX_ELEMENT_SIZE] = {0};
-        std::string modepath = opmodepath + "." + std::to_string(j);
-        UT_KVP_PROFILE_GET_STRING(modepath.c_str(), result_kvp);
-        std::string modeStr = std::string(result_kvp);
-        UT_LOG_INFO("Reading opmode path: %s, value: %s", modepath.c_str(), modeStr.c_str());
-        if (!modeStr.empty()) {
-            try {
-                temporary.supportedOperationalModes.push_back(videoDecoderStringToOperationalMode(modeStr));
-            } catch (const std::invalid_argument& e) {
-                UT_LOG_WARNING("Invalid opmode at path: %s, value: %s, error: %s", modepath.c_str(), modeStr.c_str(), e.what());
-            }
-        } else {
-            UT_LOG_WARNING("Empty opmode at path: %s", modepath.c_str());
-        }
-    }
-    UT_LOG_INFO("Parsed %zu operational modes", temporary.supportedOperationalModes.size());
-    if (temporary.supportedOperationalModes.empty()) {
-        UT_LOG_WARNING("No valid operational modes parsed for decoder");
-    }
-
     // Get all known codec names from the centralized mapping
     const std::vector<std::string> known_codecs = videoDecoderGetAllCodecNames();
-
-    auto savedOpmodes = std::move(temporary.supportedOperationalModes);
 
     gVideodecoders_hfp.clear();
     UT_LOG_INFO("Cleared gVideodecoders_hfp, capacity: %zu", gVideodecoders_hfp.capacity());
@@ -530,7 +471,6 @@ UT_status_t vts_videodecoder_parseVideoDecoderHFP()
         temporary.supportedCodecs.clear();
         temporary.supportedDynamicRanges.clear();
         temporary.supportedColorimetries.clear();
-        temporary.supportedOperationalModes = savedOpmodes;
 
         UT_LOG_INFO("Parsing Decoder ID: %d, supportsSecure: %d", temporary.id, temporary.supportsSecure);
 
@@ -705,11 +645,10 @@ UT_status_t vts_videodecoder_parseVideoDecoderHFP()
             }
         }
 
-        UT_LOG_INFO("Decoder %d: id=%d, %zu codecs, %zu dynamic ranges, %zu colorimetries, %zu opmodes",
+        UT_LOG_INFO("Decoder %d: id=%d, %zu codecs, %zu dynamic ranges, %zu colorimetries",
                     i, temporary.id, temporary.supportedCodecs.size(),
                     temporary.supportedDynamicRanges.size(),
-                    temporary.supportedColorimetries.size(),
-                    temporary.supportedOperationalModes.size());
+                    temporary.supportedColorimetries.size());
 
         if (temporary.supportedCodecs.empty()) {
             UT_LOG_WARNING("Decoder %d has no valid codecs, skipping", i);
@@ -735,10 +674,9 @@ UT_status_t vts_videodecoder_parseVideoDecoderHFP()
 
     UT_LOG_INFO("Successfully parsed %zu decoders", gVideodecoders_hfp.size());
     for (const auto& dec : gVideodecoders_hfp) {
-        UT_LOG_INFO("HFP Decoder ID: %d, codecs: %zu, dynamic ranges: %zu, colorimetries: %zu, opmodes: %zu",
+        UT_LOG_INFO("HFP Decoder ID: %d, codecs: %zu, dynamic ranges: %zu, colorimetries: %zu",
                     dec.id, dec.supportedCodecs.size(), dec.supportedDynamicRanges.size(),
-                    dec.supportedColorimetries.size(),
-                    dec.supportedOperationalModes.size());
+                    dec.supportedColorimetries.size());
     }
     return UT_STATUS_OK;
 }

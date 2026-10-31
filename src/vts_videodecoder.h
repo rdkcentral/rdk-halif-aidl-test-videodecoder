@@ -125,7 +125,7 @@
 #include "com/rdk/hal/videodecoder/ColorMatrix.h"
 #include "com/rdk/hal/videodecoder/TransferCharacteristics.h"
 #include "com/rdk/hal/videodecoder/ColorPrimaries.h"
-#include "com/rdk/hal/videodecoder/OperationalMode.h"
+#include "com/rdk/hal/OperationalMode.h"
 #include "com/rdk/hal/videodecoder/Colorimetry.h"
 #include "com/rdk/hal/videodecoder/MasteringDisplayInfo.h"
 #include "com/rdk/hal/videodecoder/ContentLightLevel.h"
@@ -136,7 +136,6 @@
 
 #define VIDEODECODERMGR "videodecoder"
 #define VIDEODECODERMGR_IVIDEODECODER "videodecoder.IVideoDecoder"
-#define VIDEODECODERMGR_SUPPORTED_OPERATIONAL_MODES "videodecoder.supportedOperationalModes"
 
 using namespace com::rdk::hal;
 using namespace com::rdk::hal::videodecoder;
@@ -221,7 +220,6 @@ typedef struct decoder {
     std::vector<CodecCapability> supportedCodecs;
     std::vector<DynamicRange> supportedDynamicRanges;
     std::vector<Colorimetry> supportedColorimetries;
-    std::vector<OperationalMode> supportedOperationalModes;
     bool supportsSecure;
 }decoder_t;
 
@@ -330,7 +328,6 @@ struct videoDecoderTestConfiguration_t {
 UT_status_t getVideoDecoderService();
 
 DynamicRange videoDecoderStringToDynamicRange(const std::string& rangeStr);
-OperationalMode videoDecoderStringToOperationalMode(const std::string& modeStr);
 PixelFormat videoDecoderStringToPixelFormat(const std::string& formatStr);
 videodecoder::CodecProfile videoDecoderStringToCodecProfile(const std::string& profileStr);
 videodecoder::CodecLevel videoDecoderStringToCodecLevel(const std::string& levelStr);
@@ -414,22 +411,17 @@ bool checkDecoderSupportsConfig(const IVideoDecoder::Id& decoderId, const videod
     } while (0)
 
 /**
- * @brief Calls getSupportedOperationalModes and verifies a non-empty list is returned.
- * @param[out] modes Vector to store the supported operational modes.
- * @pre gVideoDecoderManager is initialized.
- * @post modes contains at least one mode (tunnelled or non-tunnelled).
+ * @brief Queries the vendor-selected output mode after start().
  */
-#define VIDEODECODER_MANAGER_GETSUPPORTEDOPERATIONALMODES(modes) \
+#define VIDEODECODER_GETCURRENTOPERATIONALMODE(videoDecoder, mode) \
     do { \
-        Status status; \
-        UT_LOG_INFO("Calling getSupportedOperationalModes(OUT:modes:[])"); \
-        status = gVideoDecoderManager->getSupportedOperationalModes(&modes); \
-        UT_LOG_INFO("Result getSupportedOperationalModes(OUT:modes:[size: %d]), status:[isOK:%s, exception:%s]", \
-                    modes.size(), UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+        Status status = (videoDecoder)->getCurrentOperationalMode(&(mode)); \
+        UT_LOG_INFO("Result getCurrentOperationalMode(), status:[isOK:%s, exception:%s]", \
+                    UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         UT_ASSERT_TRUE_FATAL(status.isOk()); \
-        UT_ASSERT_FALSE_FATAL(modes.empty()) << "At least one operational mode must be supported"; \
         UT_ASSERT_EQUAL_FATAL(status.exceptionCode(), Status::EX_NONE); \
+        UT_ASSERT_TRUE_FATAL((mode) == OperationalMode::TUNNELLED || (mode) == OperationalMode::NON_TUNNELLED); \
     } while (0)
 
 /**
@@ -485,7 +477,7 @@ do { \
                 break; \
             case PropertyValue::Value::Tag::stringValue: \
                 UT_LOG_DEBUG("Result getProperty(IN:property[%s], OUT:propertyValue[%s]), status:[isOK:%s, exception:%s]", videodecoder::toString(property).c_str(), \
-                aidl_return->value->get<PropertyValue::Value::Tag::stringValue>().string(), \
+                aidl_return->value->get<PropertyValue::Value::Tag::stringValue>().c_str(), \
                 UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                 UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
                 break; \
@@ -521,7 +513,7 @@ do { \
                     break; \
                 case PropertyValue::Value::Tag::stringValue: \
                     UT_LOG_INFO("Result getProperty(IN:property[%s], OUT:propertyValue[%s]), status:[isOK:%s, exception:%s]", videodecoder::toString(property).c_str(), \
-                    propertyValue->value->get<PropertyValue::Value::Tag::stringValue>().string(), \
+                    propertyValue->value->get<PropertyValue::Value::Tag::stringValue>().c_str(), \
                     UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
                     break; \
@@ -1018,7 +1010,7 @@ do { \
 /**
  * @brief Calls setProperty on an IVideoDecoder instance to set an integer property value.
  * @param[in] videoDecoder The IVideoDecoder instance (not IVideoDecoderController).
- * @param[in] property The Property enum key (must be read-write, e.g., OPERATIONAL_MODE).
+ * @param[in] property The Property enum key (must be read-write, e.g., SHA1_CALC).
  * @param[in] value The integer value to set.
  * @param[in] value_desc String description of the value for logging.
  */
@@ -1290,13 +1282,11 @@ do { \
 #define VIDEODECODER_DECODEBUFFER_WITH_METADATA_SUCCESS(controller, frameBufferHandle, frameMetadata) \
     do { \
         bool decodeResult = false; \
-        UT_LOG_INFO("Calling decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld,disc=%d])", \
-                    static_cast<uint64_t>(frameBufferHandle), static_cast<long long>((frameMetadata).nsPresentationTime), \
-                    static_cast<int>((frameMetadata).discontinuity)); \
+        UT_LOG_INFO("Calling decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld])", \
+                    static_cast<uint64_t>(frameBufferHandle), static_cast<long long>((frameMetadata).nsPresentationTime)); \
         Status status = (controller)->decodeBufferWithMetadata((frameBufferHandle), (frameMetadata), &decodeResult); \
-        UT_LOG_INFO("Result decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld,disc=%d]) status=[isOK:%s, exception:%s], result=%s", \
+        UT_LOG_INFO("Result decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld]) status=[isOK:%s, exception:%s], result=%s", \
                     static_cast<uint64_t>(frameBufferHandle), static_cast<long long>((frameMetadata).nsPresentationTime), \
-                    static_cast<int>((frameMetadata).discontinuity), \
                     UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode()), \
                     decodeResult ? "true" : "false"); \
@@ -1312,19 +1302,16 @@ do { \
         } \
     } while (0)
 
-#define VIDEODECODER_DECODEBUFFER_WITH_METADATA_FAILURE(controller, framePts, frameBufferHandle, frameDiscontinuity, expectedException) \
+#define VIDEODECODER_DECODEBUFFER_WITH_METADATA_FAILURE(controller, framePts, frameBufferHandle, expectedException) \
     do { \
         bool decodeResult = false; \
         ::com::rdk::hal::videodecoder::InputBufferMetadata inputMetadata = {}; \
         inputMetadata.nsPresentationTime = static_cast<int64_t>(framePts); \
-        inputMetadata.discontinuity = static_cast<bool>(frameDiscontinuity); \
-        UT_LOG_INFO("Calling decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld,disc=%d])", \
-                    static_cast<uint64_t>(frameBufferHandle), static_cast<long long>(inputMetadata.nsPresentationTime), \
-                    static_cast<int>(inputMetadata.discontinuity)); \
+        UT_LOG_INFO("Calling decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld])", \
+                    static_cast<uint64_t>(frameBufferHandle), static_cast<long long>(inputMetadata.nsPresentationTime)); \
         Status status = (controller)->decodeBufferWithMetadata((frameBufferHandle), inputMetadata, &decodeResult); \
-        UT_LOG_INFO("Result decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld,disc=%d]) status=[isOK:%s, exception:%s], result=%s", \
+        UT_LOG_INFO("Result decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld]) status=[isOK:%s, exception:%s], result=%s", \
                     static_cast<uint64_t>(frameBufferHandle), static_cast<long long>(inputMetadata.nsPresentationTime), \
-                    static_cast<int>(inputMetadata.discontinuity), \
                     UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode()), \
                     decodeResult ? "true" : "false"); \
@@ -1732,7 +1719,7 @@ public:
                 sp<VideoDecoderControllerListener> controlListener,
                 sp<VideoDecoderEventListener> eventListener,
                 sp<IAVBuffer> AVBufferManager,
-                bool secureDecode, bool tunnelMode, const videoDecoderTestConfiguration_t& config,
+                bool secureDecode, const videoDecoderTestConfiguration_t& config,
                 IAVBufferHelper* avbufferHelper, bool isSinkAttached)
     {
         mDecoderId = decoderId;
@@ -1744,7 +1731,6 @@ public:
         mAVBufferManager = std::move(AVBufferManager);
         mAVbufferHelper = avbufferHelper;
         mIsSinkAttached = isSinkAttached;
-        mTunnelMode = tunnelMode;
         mEventListener->setDecoderID(decoderId.value);
         mControlListener->setDecoderID(decoderId.value);
     }
@@ -1760,7 +1746,8 @@ private:
     // Configuration parameters
     IVideoDecoder::Id mDecoderId;
     bool mSecureDecode;
-    bool mTunnelMode;
+    std::atomic<OperationalMode> mOperationalMode{OperationalMode::NON_TUNNELLED};
+    bool mDecoderStarted = false;
     bool mConcurrentDecodeConsume = false;
     bool mIsSinkAttached;
     videoDecoderTestConfiguration_t mTestConfiguration;
@@ -1785,12 +1772,13 @@ private:
     void setupVideoDecoder();
     // Helpers for setupVideoDecoder(), one per setup concern:
     void openOrReuseVideoDecoder();
-    void applyTunnelModePropertyIfNeeded();
+    bool startDecoder();
     void buildAndApplyStreamConfig();
     void applyDecodeErrorPolicyIfNeeded();
     void applyLowLatencyModeIfNeeded();
     void startDecoding();
     bool validateDecodedFrame();
+    void validateAndReleaseOutputBuffer(const DecodedVideoFrame_t& decodedFrame);
     // Helpers for validateDecodedFrame(), one per validation concern:
     bool validateFrameLatencyAndBuffer(const DecodedVideoFrame_t& decodedFrame, std::set<int64_t>& receivedPts,
                                         int32_t& totalOnFramesDecoded);
