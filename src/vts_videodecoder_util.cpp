@@ -213,8 +213,7 @@ ScanType videoDecoderStringToScanType(const std::string& scanTypeStr) {
 OperationalMode videoDecoderStringToOperationalMode(const std::string& modeStr) {
     static const std::unordered_map<std::string, OperationalMode> modeMap = {
         {"TUNNELLED", OperationalMode::TUNNELLED},
-        {"NON_TUNNELLED", OperationalMode::NON_TUNNELLED},
-        {"GRAPHICS_TEXTURE", OperationalMode::GRAPHICS_TEXTURE}
+        {"NON_TUNNELLED", OperationalMode::NON_TUNNELLED}
     };
 
     auto it = modeMap.find(modeStr);
@@ -410,15 +409,6 @@ bool vts_videodecoder_helper_validatePropertyValue(int decoder_id,const std::opt
             return std::holds_alternative<int32_t>(val) && std::get<int32_t>(val) >= 0;  // Non-negative size
         case videodecoder::Property::OUTPUT_FRAME_POOL_SIZE:
             return std::holds_alternative<int32_t>(val) && std::get<int32_t>(val) >= 0;  // Non-negative size
-        case videodecoder::Property::OPERATIONAL_MODE:
-            return std::holds_alternative<int32_t>(val) &&(std::get<int32_t>(val) == static_cast<int32_t>(OperationalMode::TUNNELLED) ||
-                std::get<int32_t>(val) == static_cast<int32_t>(OperationalMode::NON_TUNNELLED) ||
-                std::get<int32_t>(val) == static_cast<int32_t>(OperationalMode::GRAPHICS_TEXTURE) ||
-                // Check for valid OR combinations (GRAPHICS_TEXTURE with TUNNELLED or NON_TUNNELLED)
-                std::get<int32_t>(val) == (static_cast<int32_t>(OperationalMode::TUNNELLED) |
-                static_cast<int32_t>(OperationalMode::GRAPHICS_TEXTURE)) ||
-                std::get<int32_t>(val) == (static_cast<int32_t>(OperationalMode::NON_TUNNELLED) |
-                static_cast<int32_t>(OperationalMode::GRAPHICS_TEXTURE)));
         case videodecoder::Property::LOW_LATENCY_MODE:
             return std::holds_alternative<int32_t>(val) && (std::get<int32_t>(val) == 0 || std::get<int32_t>(val) == 1);
         case videodecoder::Property::DECODE_ERROR_POLICY:

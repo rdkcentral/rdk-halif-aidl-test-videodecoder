@@ -125,7 +125,7 @@
 #include "com/rdk/hal/videodecoder/ColorMatrix.h"
 #include "com/rdk/hal/videodecoder/TransferCharacteristics.h"
 #include "com/rdk/hal/videodecoder/ColorPrimaries.h"
-#include "com/rdk/hal/videodecoder/OperationalMode.h"
+#include "com/rdk/hal/OperationalMode.h"   /* moved to common in rdk-halif-aidl 0.23.0 */
 #include "com/rdk/hal/videodecoder/Colorimetry.h"
 #include "com/rdk/hal/videodecoder/MasteringDisplayInfo.h"
 #include "com/rdk/hal/videodecoder/ContentLightLevel.h"
@@ -415,21 +415,33 @@ bool checkDecoderSupportsConfig(const IVideoDecoder::Id& decoderId, const videod
 
 /**
  * @brief Calls getSupportedOperationalModes and verifies a non-empty list is returned.
- * @param[out] modes Vector to store the supported operational modes.
- * @pre gVideoDecoderManager is initialized.
- * @post modes contains at least one mode (tunnelled or non-tunnelled).
+ * @param[in]  videoDecoder The IVideoDecoder instance.
+ * @param[out] mode Operational mode currently selected by the vendor.
+ * @pre The decoder must be in State::STARTED (otherwise EX_ILLEGAL_STATE).
  */
-#define VIDEODECODER_MANAGER_GETSUPPORTEDOPERATIONALMODES(modes) \
+#define VIDEODECODER_GETCURRENTOPERATIONALMODE(videoDecoder, mode) \
     do { \
         Status status; \
-        UT_LOG_INFO("Calling getSupportedOperationalModes(OUT:modes:[])"); \
-        status = gVideoDecoderManager->getSupportedOperationalModes(&modes); \
-        UT_LOG_INFO("Result getSupportedOperationalModes(OUT:modes:[size: %d]), status:[isOK:%s, exception:%s]", \
-                    modes.size(), UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+        UT_LOG_INFO("Calling getCurrentOperationalMode(OUT:mode:[])"); \
+        status = (videoDecoder)->getCurrentOperationalMode(&(mode)); \
+        UT_LOG_INFO("Result getCurrentOperationalMode(OUT:mode:[%s]), status:[isOK:%s, exception:%s]", \
+                    ::com::rdk::hal::toString(mode).c_str(), UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
-        UT_ASSERT_TRUE_FATAL(status.isOk()); \
-        UT_ASSERT_FALSE_FATAL(modes.empty()) << "At least one operational mode must be supported"; \
-        UT_ASSERT_EQUAL_FATAL(status.exceptionCode(), Status::EX_NONE); \
+        UT_ASSERT_TRUE(status.isOk()); \
+        UT_ASSERT_EQUAL(status.exceptionCode(), Status::EX_NONE); \
+    } while (0)
+
+#define VIDEODECODER_GETCURRENTOPERATIONALMODE_FAILURE(videoDecoder, expectedException) \
+    do { \
+        Status status; \
+        OperationalMode _mode; \
+        UT_LOG_INFO("Calling getCurrentOperationalMode(OUT:mode:[])"); \
+        status = (videoDecoder)->getCurrentOperationalMode(&_mode); \
+        UT_LOG_INFO("Result getCurrentOperationalMode(), status:[isOK:%s, exception:%s]", \
+                    UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+                    UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
+        UT_ASSERT_FALSE(status.isOk()); \
+        UT_ASSERT_EQUAL(status.exceptionCode(), (expectedException)); \
     } while (0)
 
 /**
@@ -485,7 +497,7 @@ do { \
                 break; \
             case PropertyValue::Value::Tag::stringValue: \
                 UT_LOG_DEBUG("Result getProperty(IN:property[%s], OUT:propertyValue[%s]), status:[isOK:%s, exception:%s]", videodecoder::toString(property).c_str(), \
-                aidl_return->value->get<PropertyValue::Value::Tag::stringValue>().string(), \
+                aidl_return->value->get<PropertyValue::Value::Tag::stringValue>().c_str(), \
                 UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                 UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
                 break; \
@@ -521,7 +533,7 @@ do { \
                     break; \
                 case PropertyValue::Value::Tag::stringValue: \
                     UT_LOG_INFO("Result getProperty(IN:property[%s], OUT:propertyValue[%s]), status:[isOK:%s, exception:%s]", videodecoder::toString(property).c_str(), \
-                    propertyValue->value->get<PropertyValue::Value::Tag::stringValue>().string(), \
+                    propertyValue->value->get<PropertyValue::Value::Tag::stringValue>().c_str(), \
                     UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
                     break; \
@@ -1290,13 +1302,11 @@ do { \
 #define VIDEODECODER_DECODEBUFFER_WITH_METADATA_SUCCESS(controller, frameBufferHandle, frameMetadata) \
     do { \
         bool decodeResult = false; \
-        UT_LOG_INFO("Calling decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld,disc=%d])", \
-                    static_cast<uint64_t>(frameBufferHandle), static_cast<long long>((frameMetadata).nsPresentationTime), \
-                    static_cast<int>((frameMetadata).discontinuity)); \
+        UT_LOG_INFO("Calling decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld])", \
+                    static_cast<uint64_t>(frameBufferHandle), static_cast<long long>((frameMetadata).nsPresentationTime)); \
         Status status = (controller)->decodeBufferWithMetadata((frameBufferHandle), (frameMetadata), &decodeResult); \
-        UT_LOG_INFO("Result decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld,disc=%d]) status=[isOK:%s, exception:%s], result=%s", \
+        UT_LOG_INFO("Result decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld]) status=[isOK:%s, exception:%s], result=%s", \
                     static_cast<uint64_t>(frameBufferHandle), static_cast<long long>((frameMetadata).nsPresentationTime), \
-                    static_cast<int>((frameMetadata).discontinuity), \
                     UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode()), \
                     decodeResult ? "true" : "false"); \
@@ -1312,19 +1322,16 @@ do { \
         } \
     } while (0)
 
-#define VIDEODECODER_DECODEBUFFER_WITH_METADATA_FAILURE(controller, framePts, frameBufferHandle, frameDiscontinuity, expectedException) \
+#define VIDEODECODER_DECODEBUFFER_WITH_METADATA_FAILURE(controller, framePts, frameBufferHandle, expectedException) \
     do { \
         bool decodeResult = false; \
         ::com::rdk::hal::videodecoder::InputBufferMetadata inputMetadata = {}; \
         inputMetadata.nsPresentationTime = static_cast<int64_t>(framePts); \
-        inputMetadata.discontinuity = static_cast<bool>(frameDiscontinuity); \
-        UT_LOG_INFO("Calling decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld,disc=%d])", \
-                    static_cast<uint64_t>(frameBufferHandle), static_cast<long long>(inputMetadata.nsPresentationTime), \
-                    static_cast<int>(inputMetadata.discontinuity)); \
+        UT_LOG_INFO("Calling decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld])", \
+                    static_cast<uint64_t>(frameBufferHandle), static_cast<long long>(inputMetadata.nsPresentationTime)); \
         Status status = (controller)->decodeBufferWithMetadata((frameBufferHandle), inputMetadata, &decodeResult); \
-        UT_LOG_INFO("Result decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld,disc=%d]) status=[isOK:%s, exception:%s], result=%s", \
+        UT_LOG_INFO("Result decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld]) status=[isOK:%s, exception:%s], result=%s", \
                     static_cast<uint64_t>(frameBufferHandle), static_cast<long long>(inputMetadata.nsPresentationTime), \
-                    static_cast<int>(inputMetadata.discontinuity), \
                     UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode()), \
                     decodeResult ? "true" : "false"); \
@@ -1785,7 +1792,7 @@ private:
     void setupVideoDecoder();
     // Helpers for setupVideoDecoder(), one per setup concern:
     void openOrReuseVideoDecoder();
-    void applyTunnelModePropertyIfNeeded();
+    void checkOperationalModeIfNeeded();
     void buildAndApplyStreamConfig();
     void applyDecodeErrorPolicyIfNeeded();
     void applyLowLatencyModeIfNeeded();

@@ -189,15 +189,17 @@ void videoDecoderTest::openOrReuseVideoDecoder()
     }
 }
 
-void videoDecoderTest::applyTunnelModePropertyIfNeeded()
+/* Since rdk-halif-aidl 0.23.0 the operational mode is vendor-selected and read-only
+ * (IVideoDecoder::getCurrentOperationalMode(), STARTED state only); it can no longer be
+ * set through the OPERATIONAL_MODE property. Query and report it once the decoder is started. */
+void videoDecoderTest::checkOperationalModeIfNeeded()
 {
-    if (mTunnelMode)
+    OperationalMode currentMode;
+    VIDEODECODER_GETCURRENTOPERATIONALMODE(mDecoderHandle, currentMode);
+    if (mTunnelMode && currentMode != OperationalMode::TUNNELLED)
     {
-        std::vector<std::pair<videodecoder::Property, int32_t>> startedIntProps = {
-            {videodecoder::Property::OPERATIONAL_MODE, static_cast<int32_t>(OperationalMode::TUNNELLED)}
-        };
-        UT_LOG_DEBUG("Set properties in TUNNELLED Mode");
-        VIDEODECODER_SETPROPERTY_LIST_SUCCESS(mVideoDecoderController, startedIntProps, intValue);
+        UT_LOG_WARNING("Tunnel mode requested by test config, but vendor selected %s",
+                       ::com::rdk::hal::toString(currentMode).c_str());
     }
 }
 
@@ -295,13 +297,15 @@ void videoDecoderTest::setupVideoDecoder()
         return;
     }
 
-    applyTunnelModePropertyIfNeeded();
     buildAndApplyStreamConfig();
     applyDecodeErrorPolicyIfNeeded();
     applyLowLatencyModeIfNeeded();
 
     // Start Decoder
     VIDEODECODER_START_SUCCESS(mDecoderHandle, mVideoDecoderController, true);
+
+    // Report the vendor-selected operational mode (only valid in STARTED)
+    checkOperationalModeIfNeeded();
 
     UT_LOG_DEBUG("Decoder started");
 }
@@ -413,7 +417,6 @@ void videoDecoderTest::startDecoding()
 
         videodecoder::InputBufferMetadata metadata = {};
         metadata.nsPresentationTime = framePTS;
-        metadata.discontinuity = false;
         if (mTestConfiguration.metadataOverridePts != -1 && mTestConfiguration.metadataOverridePts == framePTS)
         {
             UT_LOG_INFO("Applying metadata override at PTS:%lld", framePTS);
@@ -443,7 +446,7 @@ void videoDecoderTest::startDecoding()
             AVBUFFER_ALLOC_SUCCESS(mAVBufferManager, mVideoPool, frameSize, postEosBufferHandle);
             // Per spec, decodeBufferWithMetadata() must throw EX_ILLEGAL_STATE once called after signalEndOfStream().
             VIDEODECODER_DECODEBUFFER_WITH_METADATA_FAILURE(mVideoDecoderController, framePTS, postEosBufferHandle,
-                                                            false, Status::EX_ILLEGAL_STATE);
+                                                            Status::EX_ILLEGAL_STATE);
             AVBUFFER_FREE_SUCCESS(mAVBufferManager, postEosBufferHandle);
             // Let the drain finish before stop(), which would otherwise discard it along with its onEndOfStream().
             UT_ASSERT_TRUE(mControlListener->waitForEndOfStream(mEOSignaledCount, std::chrono::milliseconds(5000)))
@@ -875,7 +878,6 @@ bool videoDecoderTest::runBackPressureTest()
 
         videodecoder::InputBufferMetadata metadata = {};
         metadata.nsPresentationTime = framePTS;
-        metadata.discontinuity = false;
 
         bool decodeResult = false;
         callbackBaseline = mControlListener->getDecodeBufferAvailableCount();

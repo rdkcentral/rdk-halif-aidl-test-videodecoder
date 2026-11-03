@@ -160,19 +160,15 @@ public:
 
     bool isTunnelModeSupported() const
     {
-        // Check if any decoder supports tunnel mode by querying the manager
-        std::vector<OperationalMode> supportedModes;
-        android::binder::Status status = gVideoDecoderManager->getSupportedOperationalModes(&supportedModes);
-
-        if (!status.isOk()) {
-            UT_ASSERT_TRUE(status.isOk())
-                 << "Failed to query supported operational modes: " << status.exceptionMessage().c_str();
-            return false;
-        }
-
-        for (const auto& mode : supportedModes) {
-            if (mode == OperationalMode::TUNNELLED) {
-                return true;
+        // getSupportedOperationalModes() was removed in rdk-halif-aidl 0.23.0 (mode is vendor-selected).
+        // Use the operational modes declared for the platform in the HFP profile instead.
+        for (const auto& decoder : gVideodecoders_hfp)
+        {
+            for (const auto& mode : decoder.supportedOperationalModes)
+            {
+                if (mode == OperationalMode::TUNNELLED) {
+                    return true;
+                }
             }
         }
         return false;
@@ -180,19 +176,15 @@ public:
 
     bool isNonTunnelModeSupported() const
     {
-        // Check if any decoder supports non-tunnel mode by querying the manager
-        std::vector<OperationalMode> supportedModes;
-        android::binder::Status status = gVideoDecoderManager->getSupportedOperationalModes(&supportedModes);
-
-        if (!status.isOk()) {
-            UT_ASSERT_TRUE(status.isOk())
-                 << "Failed to query supported operational modes: " << status.exceptionMessage().c_str();
-            return false;
-        }
-
-        for (const auto& mode : supportedModes) {
-            if (mode == OperationalMode::NON_TUNNELLED) {
-                return true;
+        // getSupportedOperationalModes() was removed in rdk-halif-aidl 0.23.0 (mode is vendor-selected).
+        // Use the operational modes declared for the platform in the HFP profile instead.
+        for (const auto& decoder : gVideodecoders_hfp)
+        {
+            for (const auto& mode : decoder.supportedOperationalModes)
+            {
+                if (mode == OperationalMode::NON_TUNNELLED) {
+                    return true;
+                }
             }
         }
         return false;
