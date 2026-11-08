@@ -274,7 +274,7 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getoperationalmode_pos)
 
         VIDEODECODER_START_SUCCESS(videoDecoder, videoDecoderController, true);
 
-        OperationalMode currentMode;
+        OperationalMode currentMode = OperationalMode::NON_TUNNELLED;
         VIDEODECODER_GET_OPERATIONALMODE_SUCCESS(videoDecoder, currentMode);
         UT_ASSERT_TRUE(currentMode == OperationalMode::TUNNELLED || currentMode == OperationalMode::NON_TUNNELLED)
             << "Invalid operational mode " << static_cast<int>(currentMode);
@@ -303,14 +303,14 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getoperationalmode_pos)
  * | :----: | --------- | ---------- |-------------- | ----- |
  * | 01 | Get the video decoder IDs and for each decoder its capabilities | None | Non-empty | Should Pass |
  * | 02 | Call getCurrentOperationalMode() in CLOSED state (before open) | None | EX_ILLEGAL_STATE | Should Fail |
- * | 03 | Open the decoder with the first supported codec and call getCurrentOperationalMode() in READY state | codec, secure = false, listener | EX_ILLEGAL_STATE | Should Fail |
+ * | 03 | Open the decoder with the first supported codec and call getCurrentOperationalMode() in READY state | codec, secure = capabilities.supportsSecure, listener | EX_ILLEGAL_STATE | Should Fail |
  * | 04 | Start and stop the decoder, then call getCurrentOperationalMode() in READY state | None | EX_ILLEGAL_STATE | Should Fail |
  * | 05 | Close the decoder | None | state CLOSED | Should Pass |
  */
 UT_ADD_TEST(VTS_L1_VideoDecoder, getoperationalmode_neg)
 {
     std::vector<IVideoDecoder::Id> decoderIds;
-    OperationalMode operationalMode;
+    OperationalMode operationalMode = OperationalMode::NON_TUNNELLED;
 
     VIDEODECODER_MANAGER_GETVIDEODECODERIDS(decoderIds);
     UT_ASSERT_TRUE(!decoderIds.empty());
@@ -332,7 +332,8 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getoperationalmode_neg)
         android::sp<IVideoDecoderController> videoDecoderController;
         android::sp<IVideoDecoderControllerListener> controllerListener = new VideoDecoderControllerListener();
 
-        VIDEODECODER_OPEN_SUCCESS(videoDecoder, capabilities.supportedCodecs[0].codec, false,
+        /* Same codec/secure combination as getoperationalmode_pos, so the decoder can actually be opened */
+        VIDEODECODER_OPEN_SUCCESS(videoDecoder, capabilities.supportedCodecs[0].codec, capabilities.supportsSecure,
                                   controllerListener, videoDecoderController, true);
 
         /* READY state (after open, before start) */

@@ -427,7 +427,7 @@ bool checkDecoderSupportsConfig(const IVideoDecoder::Id& decoderId, const videod
         UT_LOG_INFO("Calling getCurrentOperationalMode(OUT:operationalMode[])"); \
         status = (videoDecoder)->getCurrentOperationalMode(&(operationalMode)); \
         UT_LOG_INFO("Result getCurrentOperationalMode(OUT:operationalMode[%s]), status:[isOK:%s, exception:%s]", \
-            UT_Control_GetMapString(decoder_operationalMode_mapTable, static_cast<int32_t>(operationalMode)), \
+            (status.isOk() ? UT_Control_GetMapString(decoder_operationalMode_mapTable, static_cast<int32_t>(operationalMode)) : "N/A"), \
             UT_Control_GetMapString(bool_mapTable, status.isOk()), \
             UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         UT_ASSERT_TRUE(status.isOk()); \
@@ -440,7 +440,7 @@ bool checkDecoderSupportsConfig(const IVideoDecoder::Id& decoderId, const videod
         UT_LOG_INFO("Calling getCurrentOperationalMode(OUT:operationalMode[])"); \
         status = (videoDecoder)->getCurrentOperationalMode(&(operationalMode)); \
         UT_LOG_INFO("Result getCurrentOperationalMode(OUT:operationalMode[%s]), status:[isOK:%s, exception:%s]", \
-            UT_Control_GetMapString(decoder_operationalMode_mapTable, static_cast<int32_t>(operationalMode)), \
+            (status.isOk() ? UT_Control_GetMapString(decoder_operationalMode_mapTable, static_cast<int32_t>(operationalMode)) : "N/A"), \
             UT_Control_GetMapString(bool_mapTable, status.isOk()), \
             UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         if ((exception) == Status::EX_NONE) \
@@ -1823,8 +1823,10 @@ private:
                                         int32_t& totalOnFramesDecoded);
     void validateFrameMetadata(const DecodedVideoFrame_t& decodedFrame, int32_t& discontinuityFramesReceived);
     void validateDiscontinuityAndEndOfStream(int32_t discontinuityFramesReceived, int32_t expectedFrames,
-                                              int32_t expectedEOSFrames);
-    void validateFinalMetrics(int32_t totalOnFramesDecoded, int32_t totalOnErrorsReceived, int32_t expectedFrames);
+                                              int32_t expectedEOSFrames, bool clientFramesReturned = true);
+    void validateFinalMetrics(int32_t totalOnFramesDecoded, int32_t totalOnErrorsReceived, int32_t expectedFrames,
+                              bool clientFramesReturned = true);
+    void validateTunnelledSession();
     void releaseDecoderSession(bool closeController);
     void teardownDecoder(bool closeDecoderSession = false);
     void decodeAndConsumeVideoFrames();

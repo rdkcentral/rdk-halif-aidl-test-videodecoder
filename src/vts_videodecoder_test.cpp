@@ -89,21 +89,22 @@ void videoDecoderTest::run(bool concurrentDecodeConsume)
 
     if (concurrentDecodeConsume)
     {
-        if(!mIsSinkAttached)
-        {
-            // If sink is not attached, we need to validate decoded frames in a separate thread
-            consumerThread = thread(&videoDecoderTest::validateDecodedFrame, this);
-        }
+        // Opens and starts the decoder and reads the vendor-selected mode (no input is sent yet)
         setupVideoDecoder();
 
         if(mVideoDecoderController.get() == nullptr)
         {
             UT_ASSERT_TRUE(false) << "Decoder session is not available";
-            if(!mIsSinkAttached && consumerThread.joinable())
-            {
-                consumerThread.join();
-            }
             return;
+        }
+
+        // NON_TUNNELLED: decoded frames are returned through onFrameOutput() and validated by the client.
+        // TUNNELLED: frames are consumed by the vendor, so only EOS and decoder metrics are validated.
+        const bool tunnelled = (mCurrentMode == OperationalMode::TUNNELLED);
+        if(!mIsSinkAttached && !tunnelled)
+        {
+            // If sink is not attached, we need to validate decoded frames in a separate thread
+            consumerThread = thread(&videoDecoderTest::validateDecodedFrame, this);
         }
 
         startDecoding();
@@ -112,6 +113,10 @@ void videoDecoderTest::run(bool concurrentDecodeConsume)
         {
             // If sink is not attached, we need to validate decoded frames here
             consumerThread.join();
+        }
+        else if(!mIsSinkAttached && tunnelled)
+        {
+            validateTunnelledSession();
         }
 
         // Keep decoder running while sink consumes output frames.
@@ -200,8 +205,20 @@ void videoDecoderTest::openOrReuseVideoDecoder()
  * set through the OPERATIONAL_MODE property. Query and report it once the decoder is started. */
 void videoDecoderTest::checkOperationalModeIfNeeded()
 {
-    OperationalMode currentMode;
-    VIDEODECODER_GET_OPERATIONALMODE_SUCCESS(mDecoderHandle, currentMode);
+    OperationalMode currentMode = OperationalMode::NON_TUNNELLED;
+    UT_LOG_INFO("Calling getCurrentOperationalMode(OUT:operationalMode[])");
+    ::android::binder::Status status = mDecoderHandle->getCurrentOperationalMode(&currentMode);
+    UT_LOG_INFO("Result getCurrentOperationalMode(OUT:operationalMode[%s]), status:[isOK:%s, exception:%s]",
+        (status.isOk() ? UT_Control_GetMapString(decoder_operationalMode_mapTable, static_cast<int32_t>(currentMode)) : "N/A"),
+        UT_Control_GetMapString(bool_mapTable, status.isOk()),
+        UT_Control_GetMapString(statusException_mapTable, status.exceptionCode()));
+    if (!status.isOk())
+    {
+        // The output is undefined on failure: fail the test and tell any waiter (sink) the mode is unavailable
+        UT_ASSERT_TRUE(false) << "getCurrentOperationalMode() failed in STARTED state";
+        publishOperationalMode(ModeState::UNAVAILABLE);
+        return;
+    }
     if (mTunnelMode && currentMode != OperationalMode::TUNNELLED)
     {
         UT_LOG_WARNING("Tunnel mode requested by test config, but vendor selected %s",
@@ -721,9 +738,9 @@ void videoDecoderTest::validateFrameMetadata(const DecodedVideoFrame_t& decodedF
 }
 
 void videoDecoderTest::validateDiscontinuityAndEndOfStream(int32_t discontinuityFramesReceived, int32_t expectedFrames,
-                                                            int32_t expectedEOSFrames)
+                                                            int32_t expectedEOSFrames, bool clientFramesReturned)
 {
-    if((mTestConfiguration.discontinuityPts != -1) || (mTestConfiguration.flushPts !=-1))
+    if(clientFramesReturned && ((mTestConfiguration.discontinuityPts != -1) || (mTestConfiguration.flushPts !=-1)))
     {
         UT_ASSERT_TRUE((discontinuityFramesReceived > 0 && discontinuityFramesReceived < expectedFrames));
     }
@@ -733,7 +750,8 @@ void videoDecoderTest::validateDiscontinuityAndEndOfStream(int32_t discontinuity
     UT_ASSERT_EQUAL(eosCallbacksReceived, expectedEOSFrames);
 }
 
-void videoDecoderTest::validateFinalMetrics(int32_t totalOnFramesDecoded, int32_t totalOnErrorsReceived, int32_t expectedFrames)
+void videoDecoderTest::validateFinalMetrics(int32_t totalOnFramesDecoded, int32_t totalOnErrorsReceived, int32_t expectedFrames,
+                                            bool clientFramesReturned)
 {
     int32_t metricsFramesDecoded, metricsDecodeErrors, metricsFramesDropped;
     getDecoderMetrics(metricsFramesDecoded, metricsDecodeErrors, metricsFramesDropped);
@@ -779,7 +797,10 @@ void videoDecoderTest::validateFinalMetrics(int32_t totalOnFramesDecoded, int32_
         }
     };
 
-    assertExactOrBounded(totalOnFramesDecoded, expectedFrames);
+    if (clientFramesReturned)
+    {
+        assertExactOrBounded(totalOnFramesDecoded, expectedFrames);
+    }
     if (metricsFramesDecoded != -1)
     {
         assertExactOrBounded(metricsFramesDecoded, expectedFrames);
@@ -795,6 +816,18 @@ void videoDecoderTest::validateFinalMetrics(int32_t totalOnFramesDecoded, int32_
     {
         assertPresentOrZero(metricsFramesDropped, mTestConfiguration.framesDropped > 0);
     }
+}
+
+/* TUNNELLED: decoded output is consumed within the vendor layer and not returned through
+ * onFrameOutput() (IVideoDecoder), so only EOS and the decoder metrics can be validated. */
+void videoDecoderTest::validateTunnelledSession()
+{
+    const bool clientFramesReturned = false;
+    int32_t expectedFrames = mTestConfiguration.no_of_frames - mTestConfiguration.decodeErrors;
+    validateDiscontinuityAndEndOfStream(0, expectedFrames, mEOSignaledCount, clientFramesReturned);
+
+    int32_t totalOnErrorsReceived = mEventListener->getErrorCount();
+    validateFinalMetrics(0, totalOnErrorsReceived, expectedFrames, clientFramesReturned);
 }
 
 bool videoDecoderTest::validateDecodedFrame()
