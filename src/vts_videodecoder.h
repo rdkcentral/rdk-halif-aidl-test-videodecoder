@@ -136,7 +136,6 @@
 
 #define VIDEODECODERMGR "videodecoder"
 #define VIDEODECODERMGR_IVIDEODECODER "videodecoder.IVideoDecoder"
-#define VIDEODECODERMGR_SUPPORTED_OPERATIONAL_MODES "videodecoder.supportedOperationalModes"
 
 using namespace com::rdk::hal;
 using namespace com::rdk::hal::videodecoder;
@@ -221,6 +220,10 @@ typedef struct decoder {
     std::vector<CodecCapability> supportedCodecs;
     std::vector<DynamicRange> supportedDynamicRanges;
     std::vector<Colorimetry> supportedColorimetries;
+    // DEPRECATED (rdk-halif-aidl 0.23.0): the HFP no longer declares operational modes and this list is
+    // no longer parsed (always empty). Kept only so modules not yet migrated still compile; read the
+    // mode after start() instead (getCurrentOperationalMode() / videoDecoderTest::waitForOperationalMode()).
+    // Remove once all modules are migrated.
     std::vector<OperationalMode> supportedOperationalModes;
     bool supportsSecure;
 }decoder_t;
@@ -330,7 +333,6 @@ struct videoDecoderTestConfiguration_t {
 UT_status_t getVideoDecoderService();
 
 DynamicRange videoDecoderStringToDynamicRange(const std::string& rangeStr);
-OperationalMode videoDecoderStringToOperationalMode(const std::string& modeStr);
 PixelFormat videoDecoderStringToPixelFormat(const std::string& formatStr);
 videodecoder::CodecProfile videoDecoderStringToCodecProfile(const std::string& profileStr);
 videodecoder::CodecLevel videoDecoderStringToCodecLevel(const std::string& levelStr);
@@ -419,29 +421,36 @@ bool checkDecoderSupportsConfig(const IVideoDecoder::Id& decoderId, const videod
  * @param[out] mode Operational mode currently selected by the vendor.
  * @pre The decoder must be in State::STARTED (otherwise EX_ILLEGAL_STATE).
  */
-#define VIDEODECODER_GETCURRENTOPERATIONALMODE(videoDecoder, mode) \
+#define VIDEODECODER_GET_OPERATIONALMODE_SUCCESS(videoDecoder, operationalMode) \
     do { \
-        Status status; \
-        UT_LOG_INFO("Calling getCurrentOperationalMode(OUT:mode:[])"); \
-        status = (videoDecoder)->getCurrentOperationalMode(&(mode)); \
-        UT_LOG_INFO("Result getCurrentOperationalMode(OUT:mode:[%s]), status:[isOK:%s, exception:%s]", \
-                    ::com::rdk::hal::toString(mode).c_str(), UT_Control_GetMapString(bool_mapTable, status.isOk()), \
-                    UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
+        ::android::binder::Status status; \
+        UT_LOG_INFO("Calling getCurrentOperationalMode(OUT:operationalMode[])"); \
+        status = (videoDecoder)->getCurrentOperationalMode(&(operationalMode)); \
+        UT_LOG_INFO("Result getCurrentOperationalMode(OUT:operationalMode[%s]), status:[isOK:%s, exception:%s]", \
+            UT_Control_GetMapString(decoder_operationalMode_mapTable, static_cast<int32_t>(operationalMode)), \
+            UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+            UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
         UT_ASSERT_TRUE(status.isOk()); \
         UT_ASSERT_EQUAL(status.exceptionCode(), Status::EX_NONE); \
     } while (0)
 
-#define VIDEODECODER_GETCURRENTOPERATIONALMODE_FAILURE(videoDecoder, expectedException) \
+#define VIDEODECODER_GET_OPERATIONALMODE_FAILURE(videoDecoder, operationalMode, exception) \
     do { \
-        Status status; \
-        OperationalMode _mode; \
-        UT_LOG_INFO("Calling getCurrentOperationalMode(OUT:mode:[])"); \
-        status = (videoDecoder)->getCurrentOperationalMode(&_mode); \
-        UT_LOG_INFO("Result getCurrentOperationalMode(), status:[isOK:%s, exception:%s]", \
-                    UT_Control_GetMapString(bool_mapTable, status.isOk()), \
-                    UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
-        UT_ASSERT_FALSE(status.isOk()); \
-        UT_ASSERT_EQUAL(status.exceptionCode(), (expectedException)); \
+        ::android::binder::Status status; \
+        UT_LOG_INFO("Calling getCurrentOperationalMode(OUT:operationalMode[])"); \
+        status = (videoDecoder)->getCurrentOperationalMode(&(operationalMode)); \
+        UT_LOG_INFO("Result getCurrentOperationalMode(OUT:operationalMode[%s]), status:[isOK:%s, exception:%s]", \
+            UT_Control_GetMapString(decoder_operationalMode_mapTable, static_cast<int32_t>(operationalMode)), \
+            UT_Control_GetMapString(bool_mapTable, status.isOk()), \
+            UT_Control_GetMapString(statusException_mapTable, status.exceptionCode())); \
+        if ((exception) == Status::EX_NONE) \
+        { \
+            UT_ASSERT_TRUE(status.isOk()); \
+            UT_ASSERT_EQUAL(status.exceptionCode(), Status::EX_NONE); \
+        } else { \
+            UT_ASSERT_FALSE(status.isOk()); \
+            UT_ASSERT_EQUAL(status.exceptionCode(), (exception)); \
+        } \
     } while (0)
 
 /**
@@ -1756,6 +1765,10 @@ public:
         mControlListener->setDecoderID(decoderId.value);
     }
     void run(bool concurrentDecodeConsume);
+    /* rdk-halif-aidl 0.23.0: wait until the decoder has started and the vendor-selected operational
+     * mode has been read (getCurrentOperationalMode()). Returns false if the decoder did not reach
+     * STARTED (setup failed) or the timeout expired. Used by sink tests to follow the vendor's mode. */
+    bool waitForOperationalMode(OperationalMode& mode, std::chrono::milliseconds timeout);
     bool runBackPressureTest();
     void setTestConfiguration(const videoDecoderTestConfiguration_t& config);
     void closeDecoderSession();
@@ -1768,6 +1781,13 @@ private:
     IVideoDecoder::Id mDecoderId;
     bool mSecureDecode;
     bool mTunnelMode;
+    // Operational mode selected by the vendor (read after start(); rdk-halif-aidl 0.23.0)
+    OperationalMode mCurrentMode = OperationalMode::NON_TUNNELLED;
+    enum class ModeState { PENDING, KNOWN, UNAVAILABLE };
+    std::mutex mModeMutex;
+    std::condition_variable mModeCv;
+    ModeState mModeState = ModeState::PENDING;
+    void publishOperationalMode(ModeState state);
     bool mConcurrentDecodeConsume = false;
     bool mIsSinkAttached;
     videoDecoderTestConfiguration_t mTestConfiguration;

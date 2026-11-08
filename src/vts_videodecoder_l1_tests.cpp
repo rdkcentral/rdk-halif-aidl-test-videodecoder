@@ -229,8 +229,8 @@ UT_ADD_TEST(VTS_L1_VideoDecoder,getVideoDecoderIds_pos)
  * @brief Test the retrieval of the vendor-selected operational mode via getCurrentOperationalMode().
  *
  * Since rdk-halif-aidl 0.23.0 the operational mode is selected by the vendor implementation and
- * is read-only. getCurrentOperationalMode() is only valid in the STARTED state and must report a
- * mode declared in the HFP profile (videodecoder.supportedOperationalModes).
+ * is read-only (it is not declared in the HFP). getCurrentOperationalMode() is only valid in the
+ * STARTED state and must report a valid mode (TUNNELLED or NON_TUNNELLED).
  *
  * **Test Group ID:** Basic: 01@n
  * **Test Case ID:** 002@n
@@ -245,23 +245,12 @@ UT_ADD_TEST(VTS_L1_VideoDecoder,getVideoDecoderIds_pos)
  * | :----: | --------- | ---------- |-------------- | ----- |
  * | 01 | Get the video decoder IDs and for each decoder its capabilities | None | Non-empty | Should Pass |
  * | 02 | Open the decoder with the first supported codec | codec, secure, listener | state READY | Should Pass |
- * | 03 | Call getCurrentOperationalMode() in READY state | None | EX_ILLEGAL_STATE | Should Pass |
- * | 04 | Start the decoder and call getCurrentOperationalMode() | None | status ok, mode in HFP supportedOperationalModes | Should Pass |
- * | 05 | Stop and close the decoder | None | state CLOSED | Should Pass |
+ * | 03 | Start the decoder and call getCurrentOperationalMode() | None | status ok, mode is TUNNELLED or NON_TUNNELLED | Should Pass |
+ * | 04 | Stop and close the decoder | None | state CLOSED | Should Pass |
  */
-UT_ADD_TEST(VTS_L1_VideoDecoder, getCurrentOperationalMode_pos)
+UT_ADD_TEST(VTS_L1_VideoDecoder, getoperationalmode_pos)
 {
     std::vector<IVideoDecoder::Id> decoderIds;
-
-    /* Build set of all operational modes from HFP profile */
-    std::unordered_set<OperationalMode> modesFromProfile;
-    for (const auto& decoder : gVideodecoders_hfp)
-    {
-        for (const auto& mode : decoder.supportedOperationalModes)
-        {
-            modesFromProfile.insert(mode);
-        }
-    }
 
     VIDEODECODER_MANAGER_GETVIDEODECODERIDS(decoderIds);
     UT_ASSERT_TRUE(!decoderIds.empty());
@@ -283,22 +272,78 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getCurrentOperationalMode_pos)
         VIDEODECODER_OPEN_SUCCESS(videoDecoder, capabilities.supportedCodecs[0].codec, capabilities.supportsSecure,
                                   controllerListener, videoDecoderController, true);
 
-        /* Not STARTED: must be rejected */
-        VIDEODECODER_GETCURRENTOPERATIONALMODE_FAILURE(videoDecoder, Status::EX_ILLEGAL_STATE);
-
         VIDEODECODER_START_SUCCESS(videoDecoder, videoDecoderController, true);
 
         OperationalMode currentMode;
-        VIDEODECODER_GETCURRENTOPERATIONALMODE(videoDecoder, currentMode);
+        VIDEODECODER_GET_OPERATIONALMODE_SUCCESS(videoDecoder, currentMode);
         UT_ASSERT_TRUE(currentMode == OperationalMode::TUNNELLED || currentMode == OperationalMode::NON_TUNNELLED)
             << "Invalid operational mode " << static_cast<int>(currentMode);
-        if (!modesFromProfile.empty())
-        {
-            UT_ASSERT_NOT_EQUAL(modesFromProfile.find(currentMode), modesFromProfile.end())
-                << "Operational mode " << static_cast<int>(currentMode) << " not declared in HFP profile.";
-        }
 
         VIDEODECODER_STOP_SUCCESS(videoDecoder, videoDecoderController, true);
+        VIDEODECODER_CLOSE_SUCCESS(videoDecoder, videoDecoderController, true);
+    }
+}
+
+/**
+ * @brief Test getCurrentOperationalMode() outside the STARTED state.
+ *
+ * Since rdk-halif-aidl 0.23.0 getCurrentOperationalMode() is only valid in the STARTED state.
+ * In any other state the call must be rejected with EX_ILLEGAL_STATE.
+ *
+ * **Test Group ID:** Basic: 01@n
+ * **Test Case ID:** 036@n
+ * **Priority:** High@n
+ * @n
+ * **Pre-Conditions:** None@n
+ * **Dependencies:** None@n
+ * **User Interaction:** None@n
+ * @n
+ * **Test Procedure:**@n
+ * | Variation / Step | Description | Test Data | Expected Result | Notes |
+ * | :----: | --------- | ---------- |-------------- | ----- |
+ * | 01 | Get the video decoder IDs and for each decoder its capabilities | None | Non-empty | Should Pass |
+ * | 02 | Call getCurrentOperationalMode() in CLOSED state (before open) | None | EX_ILLEGAL_STATE | Should Fail |
+ * | 03 | Open the decoder with the first supported codec and call getCurrentOperationalMode() in READY state | codec, secure = false, listener | EX_ILLEGAL_STATE | Should Fail |
+ * | 04 | Start and stop the decoder, then call getCurrentOperationalMode() in READY state | None | EX_ILLEGAL_STATE | Should Fail |
+ * | 05 | Close the decoder | None | state CLOSED | Should Pass |
+ */
+UT_ADD_TEST(VTS_L1_VideoDecoder, getoperationalmode_neg)
+{
+    std::vector<IVideoDecoder::Id> decoderIds;
+    OperationalMode operationalMode;
+
+    VIDEODECODER_MANAGER_GETVIDEODECODERIDS(decoderIds);
+    UT_ASSERT_TRUE(!decoderIds.empty());
+
+    for (const auto& _decoderId : decoderIds)
+    {
+        android::sp<IVideoDecoder> videoDecoder;
+        videodecoder::Capabilities capabilities;
+
+        VIDEODECODER_MANAGER_GETVIDEODECODER(_decoderId, videoDecoder);
+        UT_ASSERT_TRUE_FATAL(videoDecoder != nullptr);
+
+        VIDEODECODER_GETCAPABILITIES(videoDecoder, &capabilities);
+        UT_ASSERT_TRUE_FATAL(!capabilities.supportedCodecs.empty());
+
+        /* CLOSED state (before open) */
+        VIDEODECODER_GET_OPERATIONALMODE_FAILURE(videoDecoder, operationalMode, Status::EX_ILLEGAL_STATE);
+
+        android::sp<IVideoDecoderController> videoDecoderController;
+        android::sp<IVideoDecoderControllerListener> controllerListener = new VideoDecoderControllerListener();
+
+        VIDEODECODER_OPEN_SUCCESS(videoDecoder, capabilities.supportedCodecs[0].codec, false,
+                                  controllerListener, videoDecoderController, true);
+
+        /* READY state (after open, before start) */
+        VIDEODECODER_GET_OPERATIONALMODE_FAILURE(videoDecoder, operationalMode, Status::EX_ILLEGAL_STATE);
+
+        VIDEODECODER_START_SUCCESS(videoDecoder, videoDecoderController, true);
+        VIDEODECODER_STOP_SUCCESS(videoDecoder, videoDecoderController, true);
+
+        /* READY state (after stop) */
+        VIDEODECODER_GET_OPERATIONALMODE_FAILURE(videoDecoder, operationalMode, Status::EX_ILLEGAL_STATE);
+
         VIDEODECODER_CLOSE_SUCCESS(videoDecoder, videoDecoderController, true);
     }
 }

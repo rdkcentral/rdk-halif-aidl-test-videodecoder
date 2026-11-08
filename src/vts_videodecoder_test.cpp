@@ -64,6 +64,12 @@ void videoDecoderTest::run(bool concurrentDecodeConsume)
 {
     thread consumerThread;
 
+    /* Release any waitForOperationalMode() caller if the decoder never reaches STARTED in this run */
+    struct ModeReleaseGuard {
+        videoDecoderTest* self;
+        ~ModeReleaseGuard() { self->publishOperationalMode(ModeState::UNAVAILABLE); }
+    } modeReleaseGuard{this};
+
     if (!mAVbufferHelper)
     {
         UT_ASSERT_TRUE(false) << "AVBufferHelper is not initialized";
@@ -195,12 +201,39 @@ void videoDecoderTest::openOrReuseVideoDecoder()
 void videoDecoderTest::checkOperationalModeIfNeeded()
 {
     OperationalMode currentMode;
-    VIDEODECODER_GETCURRENTOPERATIONALMODE(mDecoderHandle, currentMode);
+    VIDEODECODER_GET_OPERATIONALMODE_SUCCESS(mDecoderHandle, currentMode);
     if (mTunnelMode && currentMode != OperationalMode::TUNNELLED)
     {
         UT_LOG_WARNING("Tunnel mode requested by test config, but vendor selected %s",
-                       ::com::rdk::hal::toString(currentMode).c_str());
+                       UT_Control_GetMapString(decoder_operationalMode_mapTable, static_cast<int32_t>(currentMode)));
     }
+    // The vendor-selected mode, not the test config, defines how decoded frames are returned
+    mCurrentMode = currentMode;
+    publishOperationalMode(ModeState::KNOWN);
+}
+
+void videoDecoderTest::publishOperationalMode(ModeState state)
+{
+    {
+        std::lock_guard<std::mutex> lock(mModeMutex);
+        if (state == ModeState::UNAVAILABLE && mModeState != ModeState::PENDING)
+        {
+            return; // mode already published for this run
+        }
+        mModeState = state;
+    }
+    mModeCv.notify_all();
+}
+
+bool videoDecoderTest::waitForOperationalMode(OperationalMode& mode, std::chrono::milliseconds timeout)
+{
+    std::unique_lock<std::mutex> lock(mModeMutex);
+    if (!mModeCv.wait_for(lock, timeout, [this] { return mModeState != ModeState::PENDING; }))
+    {
+        return false;
+    }
+    mode = mCurrentMode;
+    return mModeState == ModeState::KNOWN;
 }
 
 void videoDecoderTest::buildAndApplyStreamConfig()
@@ -473,12 +506,26 @@ bool videoDecoderTest::validateFrameLatencyAndBuffer(const DecodedVideoFrame_t& 
                                                       std::set<int64_t>& receivedPts,
                                                       int32_t& totalOnFramesDecoded)
 {
+    // IVideoDecoderControllerListener.onFrameOutput(): frameAVBufferHandle is a valid handle in
+    // non-tunnelled mode and -1 in tunnelled mode (mode selected by the vendor, rdk-halif-aidl 0.23.0).
+    if (mCurrentMode == OperationalMode::TUNNELLED)
+    {
+        UT_ASSERT_EQUAL(decodedFrame.frameAVBufferHandle, -1)
+            << "Tunnelled mode: onFrameOutput must return frameAVBufferHandle -1 (PTS " << decodedFrame.framePTS << ")";
+    }
+    else
+    {
+        UT_ASSERT_NOT_EQUAL(decodedFrame.frameAVBufferHandle, -1)
+            << "Non-tunnelled mode: onFrameOutput must return a valid frameAVBufferHandle (PTS " << decodedFrame.framePTS << ")";
+    }
+
     // Free the output buffer first, so a frame rejected below does not leak.
     if(decodedFrame.frameAVBufferHandle != -1)
     {
         //TODO: Need to validate buffer content as well. Currently just checking if buffer handle is valid and freeing it.
         bool isBufferValid = false;
         AVBUFFER_ISVALID_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle, isBufferValid);
+        UT_ASSERT_TRUE(isBufferValid) << "onFrameOutput returned an invalid frameAVBufferHandle (PTS " << decodedFrame.framePTS << ")";
         if (isBufferValid)
         {
             AVBUFFER_FREE_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle);

@@ -55,13 +55,6 @@ android::binder::Status VideoDecoderManager::getVideoDecoderIds(std::vector<IVid
     return android::binder::Status::ok();
 }
 
-android::binder::Status VideoDecoderManager::getSupportedOperationalModes(std::vector<OperationalMode>* _aidl_return) {
-    _aidl_return->push_back(OperationalMode::TUNNELLED);
-    _aidl_return->push_back(OperationalMode::NON_TUNNELLED);
-// _aidl_return->push_back(OperationalMode::GRAPHICS_TEXTURE);
-    return android::binder::Status::ok();
-}
-
 android::binder::Status VideoDecoderManager::getVideoDecoder(const IVideoDecoder::Id& decoderResourceId, android::sp<IVideoDecoder>* _aidl_return) {
     // Per IVideoDecoderManager.aidl: invalid ID returns null with EX_NONE, not an exception.
     if (decoderResourceId.value < 0 || decoderResourceId.value >= NUM_VIDEO_DECODER) {
@@ -219,10 +212,6 @@ android::binder::Status VideoDecoder::getProperty(videodecoder::Property propert
             value.value = PropertyValue::Value::make<PropertyValue::Value::intValue>(mSha1Calc);
             LOG(DEBUG) << "getProperty: SHA1_CALC = " << mSha1Calc;
             break;
-        case Property::OPERATIONAL_MODE:
-            value.value = PropertyValue::Value::make<PropertyValue::Value::intValue>(mOperationalMode);
-            LOG(DEBUG) << "getProperty: OPERATIONAL_MODE = " << mOperationalMode;
-            break;
         case Property::SECURE_VIDEO:
             value.value = PropertyValue::Value::make<PropertyValue::Value::intValue>(mSupportsSecure);
             LOG(DEBUG) << "getProperty: SECURE_VIDEO = " << mSupportsSecure;
@@ -302,6 +291,16 @@ android::binder::Status VideoDecoder::getPropertyMulti(const std::vector<videode
 
 android::binder::Status VideoDecoder::getState(State* _aidl_return) {
     *_aidl_return = getState();
+    return android::binder::Status::ok();
+}
+
+/* rdk-halif-aidl 0.23.0: the operational mode is selected by the vendor (this mock always uses
+ * NON_TUNNELLED) and is read-only. It can only be queried in the STARTED state. */
+android::binder::Status VideoDecoder::getCurrentOperationalMode(OperationalMode* _aidl_return) {
+    if (getState() != State::STARTED) {
+        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
+    }
+    *_aidl_return = static_cast<OperationalMode>(mOperationalMode);
     return android::binder::Status::ok();
 }
 
@@ -570,10 +569,6 @@ android::binder::Status VideoDecoderController::validateDecodeBufferArgs(int64_t
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_ARGUMENT);
     }
     if (metadata.nsPresentationTime < 0) {
-        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_ARGUMENT);
-    }
-    /* metadata.discontinuity is reserved in v1 and MUST be false */
-    if (metadata.discontinuity) {
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_ARGUMENT);
     }
     return android::binder::Status::ok();
@@ -1164,18 +1159,6 @@ android::binder::Status VideoDecoderController::setProperty(videodecoder::Proper
                 return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_ARGUMENT);
             }
             mParentDecoder->mSha1Calc = intvalue;
-            break;
-        case Property::OPERATIONAL_MODE:
-            if (mParentDecoder->getState() != State::READY && mParentDecoder->getState() != State::STARTED) {
-                *_aidl_return = false;
-                return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
-            }
-            intvalue = propertyValue.value->get<PropertyValue::Value::Tag::intValue>();
-            if (intvalue < static_cast<int32_t>(OperationalMode::TUNNELLED) || intvalue > static_cast<int32_t>(OperationalMode::GRAPHICS_TEXTURE)) {
-                *_aidl_return = false;
-                return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_ARGUMENT);
-            }
-            mParentDecoder->mOperationalMode = intvalue;
             break;
         default:
             *_aidl_return = false;
