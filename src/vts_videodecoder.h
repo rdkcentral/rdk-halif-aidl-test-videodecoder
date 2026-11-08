@@ -1823,10 +1823,8 @@ private:
                                         int32_t& totalOnFramesDecoded);
     void validateFrameMetadata(const DecodedVideoFrame_t& decodedFrame, int32_t& discontinuityFramesReceived);
     void validateDiscontinuityAndEndOfStream(int32_t discontinuityFramesReceived, int32_t expectedFrames,
-                                              int32_t expectedEOSFrames, bool clientFramesReturned = true);
-    void validateFinalMetrics(int32_t totalOnFramesDecoded, int32_t totalOnErrorsReceived, int32_t expectedFrames,
-                              bool clientFramesReturned = true);
-    void validateTunnelledSession();
+                                              int32_t expectedEOSFrames);
+    void validateFinalMetrics(int32_t totalOnFramesDecoded, int32_t totalOnErrorsReceived, int32_t expectedFrames);
     void releaseDecoderSession(bool closeController);
     void teardownDecoder(bool closeDecoderSession = false);
     void decodeAndConsumeVideoFrames();

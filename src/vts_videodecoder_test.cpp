@@ -98,10 +98,9 @@ void videoDecoderTest::run(bool concurrentDecodeConsume)
             return;
         }
 
-        // NON_TUNNELLED: decoded frames are returned through onFrameOutput() and validated by the client.
-        // TUNNELLED: frames are consumed by the vendor, so only EOS and decoder metrics are validated.
-        const bool tunnelled = (mCurrentMode == OperationalMode::TUNNELLED);
-        if(!mIsSinkAttached && !tunnelled)
+        // onFrameOutput() is delivered in both modes (IVideoDecoderControllerListener); in TUNNELLED mode the
+        // buffer handle is -1, which validateDecodedFrame() checks against the mode read above.
+        if(!mIsSinkAttached)
         {
             // If sink is not attached, we need to validate decoded frames in a separate thread
             consumerThread = thread(&videoDecoderTest::validateDecodedFrame, this);
@@ -113,10 +112,6 @@ void videoDecoderTest::run(bool concurrentDecodeConsume)
         {
             // If sink is not attached, we need to validate decoded frames here
             consumerThread.join();
-        }
-        else if(!mIsSinkAttached && tunnelled)
-        {
-            validateTunnelledSession();
         }
 
         // Keep decoder running while sink consumes output frames.
@@ -738,9 +733,9 @@ void videoDecoderTest::validateFrameMetadata(const DecodedVideoFrame_t& decodedF
 }
 
 void videoDecoderTest::validateDiscontinuityAndEndOfStream(int32_t discontinuityFramesReceived, int32_t expectedFrames,
-                                                            int32_t expectedEOSFrames, bool clientFramesReturned)
+                                                            int32_t expectedEOSFrames)
 {
-    if(clientFramesReturned && ((mTestConfiguration.discontinuityPts != -1) || (mTestConfiguration.flushPts !=-1)))
+    if((mTestConfiguration.discontinuityPts != -1) || (mTestConfiguration.flushPts !=-1))
     {
         UT_ASSERT_TRUE((discontinuityFramesReceived > 0 && discontinuityFramesReceived < expectedFrames));
     }
@@ -750,8 +745,7 @@ void videoDecoderTest::validateDiscontinuityAndEndOfStream(int32_t discontinuity
     UT_ASSERT_EQUAL(eosCallbacksReceived, expectedEOSFrames);
 }
 
-void videoDecoderTest::validateFinalMetrics(int32_t totalOnFramesDecoded, int32_t totalOnErrorsReceived, int32_t expectedFrames,
-                                            bool clientFramesReturned)
+void videoDecoderTest::validateFinalMetrics(int32_t totalOnFramesDecoded, int32_t totalOnErrorsReceived, int32_t expectedFrames)
 {
     int32_t metricsFramesDecoded, metricsDecodeErrors, metricsFramesDropped;
     getDecoderMetrics(metricsFramesDecoded, metricsDecodeErrors, metricsFramesDropped);
@@ -797,10 +791,7 @@ void videoDecoderTest::validateFinalMetrics(int32_t totalOnFramesDecoded, int32_
         }
     };
 
-    if (clientFramesReturned)
-    {
-        assertExactOrBounded(totalOnFramesDecoded, expectedFrames);
-    }
+    assertExactOrBounded(totalOnFramesDecoded, expectedFrames);
     if (metricsFramesDecoded != -1)
     {
         assertExactOrBounded(metricsFramesDecoded, expectedFrames);
@@ -816,18 +807,6 @@ void videoDecoderTest::validateFinalMetrics(int32_t totalOnFramesDecoded, int32_
     {
         assertPresentOrZero(metricsFramesDropped, mTestConfiguration.framesDropped > 0);
     }
-}
-
-/* TUNNELLED: decoded output is consumed within the vendor layer and not returned through
- * onFrameOutput() (IVideoDecoder), so only EOS and the decoder metrics can be validated. */
-void videoDecoderTest::validateTunnelledSession()
-{
-    const bool clientFramesReturned = false;
-    int32_t expectedFrames = mTestConfiguration.no_of_frames - mTestConfiguration.decodeErrors;
-    validateDiscontinuityAndEndOfStream(0, expectedFrames, mEOSignaledCount, clientFramesReturned);
-
-    int32_t totalOnErrorsReceived = mEventListener->getErrorCount();
-    validateFinalMetrics(0, totalOnErrorsReceived, expectedFrames, clientFramesReturned);
 }
 
 bool videoDecoderTest::validateDecodedFrame()
