@@ -190,33 +190,6 @@ void videoDecoderTest::openOrReuseVideoDecoder()
     }
 }
 
-/* Since rdk-halif-aidl 0.23.0 the operational mode is vendor-selected and read-only
- * (IVideoDecoder::getCurrentOperationalMode(), STARTED state only); it can no longer be
- * set through the OPERATIONAL_MODE property. Query and report it once the decoder is started. */
-void videoDecoderTest::checkOperationalModeIfNeeded()
-{
-    OperationalMode currentMode = OperationalMode::NON_TUNNELLED;
-    UT_LOG_INFO("Calling getCurrentOperationalMode(OUT:operationalMode[])");
-    ::android::binder::Status status = mDecoderHandle->getCurrentOperationalMode(&currentMode);
-    UT_LOG_INFO("Result getCurrentOperationalMode(OUT:operationalMode[%s]), status:[isOK:%s, exception:%s]",
-        (status.isOk() ? UT_Control_GetMapString(decoder_operationalMode_mapTable, static_cast<int32_t>(currentMode)) : "N/A"),
-        UT_Control_GetMapString(bool_mapTable, status.isOk()),
-        UT_Control_GetMapString(statusException_mapTable, status.exceptionCode()));
-    if (!status.isOk())
-    {
-        // The output is undefined on failure: fail the test and keep the previous mode
-        UT_ASSERT_TRUE(false) << "getCurrentOperationalMode() failed in STARTED state";
-        return;
-    }
-    if (mTunnelMode && currentMode != OperationalMode::TUNNELLED)
-    {
-        UT_LOG_WARNING("Tunnel mode requested by test config, but vendor selected %s",
-                       UT_Control_GetMapString(decoder_operationalMode_mapTable, static_cast<int32_t>(currentMode)));
-    }
-    // The vendor-selected mode, not the test config, defines how decoded frames are returned
-    mCurrentMode = currentMode;
-}
-
 void videoDecoderTest::buildAndApplyStreamConfig()
 {
     videodecoder::VideoDecoderStreamConfig streamConfig;
@@ -318,8 +291,9 @@ void videoDecoderTest::setupVideoDecoder()
     // Start Decoder
     VIDEODECODER_START_SUCCESS(mDecoderHandle, mVideoDecoderController, true);
 
-    // Report the vendor-selected operational mode (only valid in STARTED)
-    checkOperationalModeIfNeeded();
+    /* rdk-halif-aidl 0.23.0: the operational mode is selected by the vendor and can only be read after start() */
+    mOperationMode = OperationalMode::NON_TUNNELLED;
+    VIDEODECODER_GET_OPERATIONALMODE_SUCCESS(mDecoderHandle, mOperationMode);
 
     UT_LOG_DEBUG("Decoder started");
 }
@@ -489,7 +463,7 @@ bool videoDecoderTest::validateFrameLatencyAndBuffer(const DecodedVideoFrame_t& 
 {
     // IVideoDecoderControllerListener.onFrameOutput(): frameAVBufferHandle is a valid handle in
     // non-tunnelled mode and -1 in tunnelled mode (mode selected by the vendor, rdk-halif-aidl 0.23.0).
-    if (mCurrentMode == OperationalMode::TUNNELLED)
+    if (mOperationMode == OperationalMode::TUNNELLED)
     {
         UT_ASSERT_EQUAL(decodedFrame.frameAVBufferHandle, -1)
             << "Tunnelled mode: onFrameOutput must return frameAVBufferHandle -1 (PTS " << decodedFrame.framePTS << ")";

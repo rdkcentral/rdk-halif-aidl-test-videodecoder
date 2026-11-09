@@ -204,7 +204,7 @@ public:
                 {
                     decodeTest = std::make_unique<videoDecoderTest>(_decoderId, decoderHandle, controlListener,
                                                                     eventListener, mAVBufferManager, secureDecode,
-                                                                    kTunnelModeNotRequested, testConfig, mAVbufferHelper, isSinkAttached);
+                                                                    testConfig, mAVbufferHelper, isSinkAttached);
                 }
                 else
                 {
@@ -272,7 +272,7 @@ public:
             }
 
             auto decoderTest = std::make_unique<videoDecoderTest>(_decoderId, decoderHandle, controlListener, eventListener,
-                                                            mAVBufferManager, secureDecode, kTunnelModeNotRequested, testConfig,mAVbufferHelper, isSinkAttached);
+                                                            mAVBufferManager, secureDecode, testConfig,mAVbufferHelper, isSinkAttached);
             futures.push_back(std::async(std::launch::async, &videoDecoderTest::run,
                                          decoderTest.get(), concurrentDecodeConsume));
             decoderTests.push_back(std::move(decoderTest));
@@ -303,11 +303,8 @@ public:
         UT_ASSERT_TRUE(beforeHeapMetrics.bytesTotal == afterHeapMetrics.bytesTotal);
     }
 
-    /* rdk-halif-aidl 0.23.0: tunnel / non-tunnel is selected by the vendor and cannot be requested.
-     * Each test reads the mode inside the test after start() (getCurrentOperationalMode()) and
-     * validates the output against it, so there is one test per scenario instead of a
-     * Tunnel / NonTunnel pair. */
-    static constexpr bool kTunnelModeNotRequested = false;
+    /* rdk-halif-aidl 0.23.0: tunnel / non-tunnel is selected by the vendor; each test reads the mode after start()
+     * and validates against it, so there is one test per scenario instead of a Tunnel / NonTunnel pair. */
 
     void runTest(const char *testName, bool secureMode, bool concurrentMode)
     {
@@ -382,7 +379,7 @@ public:
 
             videoDecoderTest decodeTest(_decoderId, decoderHandle, controlListener,
                                         eventListener, mAVBufferManager, false,
-                                        false, *config, mAVbufferHelper, false);
+                                        *config, mAVbufferHelper, false);
 
             if (decodeTest.runBackPressureTest())
             {

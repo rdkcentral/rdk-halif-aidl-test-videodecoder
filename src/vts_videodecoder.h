@@ -1748,7 +1748,7 @@ public:
                 sp<VideoDecoderControllerListener> controlListener,
                 sp<VideoDecoderEventListener> eventListener,
                 sp<IAVBuffer> AVBufferManager,
-                bool secureDecode, bool tunnelMode, const videoDecoderTestConfiguration_t& config,
+                bool secureDecode, const videoDecoderTestConfiguration_t& config,
                 IAVBufferHelper* avbufferHelper, bool isSinkAttached)
     {
         mDecoderId = decoderId;
@@ -1760,9 +1760,20 @@ public:
         mAVBufferManager = std::move(AVBufferManager);
         mAVbufferHelper = avbufferHelper;
         mIsSinkAttached = isSinkAttached;
-        mTunnelMode = tunnelMode;
         mEventListener->setDecoderID(decoderId.value);
         mControlListener->setDecoderID(decoderId.value);
+    }
+    /* DEPRECATED (rdk-halif-aidl 0.23.0): the operational mode is vendor-selected and read after start(),
+     * so a requested tunnel mode is ignored. Kept only for modules not yet migrated (avclock); remove after. */
+    videoDecoderTest(IVideoDecoder::Id decoderId, sp<IVideoDecoder> decoderHandle,
+                sp<VideoDecoderControllerListener> controlListener,
+                sp<VideoDecoderEventListener> eventListener,
+                sp<IAVBuffer> AVBufferManager,
+                bool secureDecode, bool /*tunnelMode*/, const videoDecoderTestConfiguration_t& config,
+                IAVBufferHelper* avbufferHelper, bool isSinkAttached)
+        : videoDecoderTest(decoderId, std::move(decoderHandle), std::move(controlListener), std::move(eventListener),
+                           std::move(AVBufferManager), secureDecode, config, avbufferHelper, isSinkAttached)
+    {
     }
     void run(bool concurrentDecodeConsume);
     bool runBackPressureTest();
@@ -1776,9 +1787,8 @@ private:
     // Configuration parameters
     IVideoDecoder::Id mDecoderId;
     bool mSecureDecode;
-    bool mTunnelMode;
     // Operational mode selected by the vendor (read after start(); rdk-halif-aidl 0.23.0)
-    OperationalMode mCurrentMode = OperationalMode::NON_TUNNELLED;
+    OperationalMode mOperationMode = OperationalMode::NON_TUNNELLED;
     bool mConcurrentDecodeConsume = false;
     bool mIsSinkAttached;
     videoDecoderTestConfiguration_t mTestConfiguration;
@@ -1803,7 +1813,6 @@ private:
     void setupVideoDecoder();
     // Helpers for setupVideoDecoder(), one per setup concern:
     void openOrReuseVideoDecoder();
-    void checkOperationalModeIfNeeded();
     void buildAndApplyStreamConfig();
     void applyDecodeErrorPolicyIfNeeded();
     void applyLowLatencyModeIfNeeded();
