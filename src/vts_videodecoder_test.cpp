@@ -64,11 +64,6 @@ void videoDecoderTest::run(bool concurrentDecodeConsume)
 {
     thread consumerThread;
 
-    /* Release any waitForOperationalMode() caller if the decoder never reaches STARTED in this run */
-    struct ModeReleaseGuard {
-        videoDecoderTest* self;
-        ~ModeReleaseGuard() { self->publishOperationalMode(ModeState::UNAVAILABLE); }
-    } modeReleaseGuard{this};
 
     if (!mAVbufferHelper)
     {
@@ -209,9 +204,8 @@ void videoDecoderTest::checkOperationalModeIfNeeded()
         UT_Control_GetMapString(statusException_mapTable, status.exceptionCode()));
     if (!status.isOk())
     {
-        // The output is undefined on failure: fail the test and tell any waiter (sink) the mode is unavailable
+        // The output is undefined on failure: fail the test and keep the previous mode
         UT_ASSERT_TRUE(false) << "getCurrentOperationalMode() failed in STARTED state";
-        publishOperationalMode(ModeState::UNAVAILABLE);
         return;
     }
     if (mTunnelMode && currentMode != OperationalMode::TUNNELLED)
@@ -221,31 +215,6 @@ void videoDecoderTest::checkOperationalModeIfNeeded()
     }
     // The vendor-selected mode, not the test config, defines how decoded frames are returned
     mCurrentMode = currentMode;
-    publishOperationalMode(ModeState::KNOWN);
-}
-
-void videoDecoderTest::publishOperationalMode(ModeState state)
-{
-    {
-        std::lock_guard<std::mutex> lock(mModeMutex);
-        if (state == ModeState::UNAVAILABLE && mModeState != ModeState::PENDING)
-        {
-            return; // mode already published for this run
-        }
-        mModeState = state;
-    }
-    mModeCv.notify_all();
-}
-
-bool videoDecoderTest::waitForOperationalMode(OperationalMode& mode, std::chrono::milliseconds timeout)
-{
-    std::unique_lock<std::mutex> lock(mModeMutex);
-    if (!mModeCv.wait_for(lock, timeout, [this] { return mModeState != ModeState::PENDING; }))
-    {
-        return false;
-    }
-    mode = mCurrentMode;
-    return mModeState == ModeState::KNOWN;
 }
 
 void videoDecoderTest::buildAndApplyStreamConfig()

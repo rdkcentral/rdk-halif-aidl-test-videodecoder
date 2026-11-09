@@ -222,7 +222,7 @@ typedef struct decoder {
     std::vector<Colorimetry> supportedColorimetries;
     // DEPRECATED (rdk-halif-aidl 0.23.0): the HFP no longer declares operational modes and this list is
     // no longer parsed (always empty). Kept only so modules not yet migrated still compile; read the
-    // mode after start() instead (getCurrentOperationalMode() / videoDecoderTest::waitForOperationalMode()).
+    // mode after start() instead (getCurrentOperationalMode()).
     // Remove once all modules are migrated.
     std::vector<OperationalMode> supportedOperationalModes;
     bool supportsSecure;
@@ -1765,10 +1765,6 @@ public:
         mControlListener->setDecoderID(decoderId.value);
     }
     void run(bool concurrentDecodeConsume);
-    /* rdk-halif-aidl 0.23.0: wait until the decoder has started and the vendor-selected operational
-     * mode has been read (getCurrentOperationalMode()). Returns false if the decoder did not reach
-     * STARTED (setup failed) or the timeout expired. Used by sink tests to follow the vendor's mode. */
-    bool waitForOperationalMode(OperationalMode& mode, std::chrono::milliseconds timeout);
     bool runBackPressureTest();
     void setTestConfiguration(const videoDecoderTestConfiguration_t& config);
     void closeDecoderSession();
@@ -1783,11 +1779,6 @@ private:
     bool mTunnelMode;
     // Operational mode selected by the vendor (read after start(); rdk-halif-aidl 0.23.0)
     OperationalMode mCurrentMode = OperationalMode::NON_TUNNELLED;
-    enum class ModeState { PENDING, KNOWN, UNAVAILABLE };
-    std::mutex mModeMutex;
-    std::condition_variable mModeCv;
-    ModeState mModeState = ModeState::PENDING;
-    void publishOperationalMode(ModeState state);
     bool mConcurrentDecodeConsume = false;
     bool mIsSinkAttached;
     videoDecoderTestConfiguration_t mTestConfiguration;
