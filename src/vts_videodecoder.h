@@ -1763,20 +1763,13 @@ public:
         mEventListener->setDecoderID(decoderId.value);
         mControlListener->setDecoderID(decoderId.value);
     }
-    /* DEPRECATED (rdk-halif-aidl 0.23.0): the operational mode is vendor-selected and read after start(),
-     * so a requested tunnel mode is ignored. Kept only for modules not yet migrated (avclock); remove after. */
-    videoDecoderTest(IVideoDecoder::Id decoderId, sp<IVideoDecoder> decoderHandle,
-                sp<VideoDecoderControllerListener> controlListener,
-                sp<VideoDecoderEventListener> eventListener,
-                sp<IAVBuffer> AVBufferManager,
-                bool secureDecode, bool /*tunnelMode*/, const videoDecoderTestConfiguration_t& config,
-                IAVBufferHelper* avbufferHelper, bool isSinkAttached)
-        : videoDecoderTest(decoderId, std::move(decoderHandle), std::move(controlListener), std::move(eventListener),
-                           std::move(AVBufferManager), secureDecode, config, avbufferHelper, isSinkAttached)
-    {
-    }
     void run(bool concurrentDecodeConsume);
-    bool runBackPressureTest();
+    /* Back-pressure run: run() sends input until the decoder refuses a buffer and checks
+     * onDecodeBufferAvailable(), instead of decoding and validating the stream */
+    void setBackPressureTest(bool enable) { mBackPressureTest = enable; }
+    bool isBackPressureObserved() const { return mBackPressureObserved; }
+    /* Operational mode selected by the vendor, read after start() (rdk-halif-aidl 0.23.0) */
+    OperationalMode getOperationalMode() const { return mOperationMode; }
     void setTestConfiguration(const videoDecoderTestConfiguration_t& config);
     void closeDecoderSession();
     void getDecoderMetrics(int32_t &framesDecoded, int32_t &decodeErrors, int32_t &framesDropped);
@@ -1791,6 +1784,8 @@ private:
     OperationalMode mOperationMode = OperationalMode::NON_TUNNELLED;
     bool mConcurrentDecodeConsume = false;
     bool mIsSinkAttached;
+    bool mBackPressureTest = false;
+    bool mBackPressureObserved = false;
     videoDecoderTestConfiguration_t mTestConfiguration;
     sp<IVideoDecoder> mDecoderHandle;
     sp<VideoDecoderControllerListener> mControlListener;
@@ -1817,6 +1812,11 @@ private:
     void applyDecodeErrorPolicyIfNeeded();
     void applyLowLatencyModeIfNeeded();
     void startDecoding();
+    bool sendUntilBackPressure();
+    // Helpers for sendUntilBackPressure():
+    bool fillUntilRefused(int& callbackCountBeforeRefusal);
+    void checkDecodeBufferAvailableCallback(int callbackCountBeforeRefusal);
+    void freeHeldOutputFrames();
     bool validateDecodedFrame();
     // Helpers for validateDecodedFrame(), one per validation concern:
     bool validateFrameLatencyAndBuffer(const DecodedVideoFrame_t& decodedFrame, std::set<int64_t>& receivedPts,

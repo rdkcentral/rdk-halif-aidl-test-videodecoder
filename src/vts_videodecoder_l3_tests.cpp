@@ -90,6 +90,8 @@ public:
     vector<tuple<IVideoDecoder::Id, sp<IVideoDecoder>, sp<VideoDecoderControllerListener>, sp<VideoDecoderEventListener>, videodecoder::Capabilities *>> mVideoDecoderList;
     sp<IAVBuffer> mAVBufferManager;
     IAVBufferHelper* mAVbufferHelper;
+    bool mBackPressureObserved = false;      // set by runSequentialDecode() in a back-pressure test
+    bool mBackPressureNonTunnelRun = false;  // a back-pressure run used NON_TUNNELLED (back-pressure can be forced)
 
     void SetUp() override
     {
@@ -158,28 +160,15 @@ public:
         }
     }
 
-    bool isSecureModeSupported() const
+    /* Returns true if at least one stream was executed on a decoder (unsupported ones are skipped) */
+    bool runSequentialDecode(std::vector<videoDecoderTestConfiguration_t>& testConfigurations,
+                             bool secureDecode, bool concurrentDecodeConsume, bool backPressureTest = false)
     {
-        // Check if any decoder supports secure decoding
-        for (const auto& [_decoderId, decoderHandle, controlListener, eventListener, capabilities] : mVideoDecoderList)
-        {
-            if (capabilities && capabilities->supportsSecure) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void runSequentialDecode(std::vector<videoDecoderTestConfiguration_t>& testConfigurations,
-                             bool secureDecode, bool concurrentDecodeConsume)
-    {
-        int32_t activeDecoders = 0;
+        bool isTestExecuted = false;
 
         for (const auto& [_decoderId, decoderHandle, controlListener, eventListener, capabilities] : mVideoDecoderList)
         {
             bool isSinkAttached = false;
-            videodecoder::Codec activeCodec = static_cast<videodecoder::Codec>(0);
-            bool streamExecutedOnDecoder = false;
 
             std::unique_ptr<videoDecoderTest> decodeTest;
 
@@ -205,16 +194,11 @@ public:
                     decodeTest = std::make_unique<videoDecoderTest>(_decoderId, decoderHandle, controlListener,
                                                                     eventListener, mAVBufferManager, secureDecode,
                                                                     testConfig, mAVbufferHelper, isSinkAttached);
+                    decodeTest->setBackPressureTest(backPressureTest);
                 }
                 else
                 {
                     decodeTest->setTestConfiguration(testConfig);
-                }
-
-                const bool codecChanged = (activeCodec != static_cast<videodecoder::Codec>(0)) && (activeCodec != testConfig.codec);
-                if (codecChanged)
-                {
-                    decodeTest->closeDecoderSession();
                 }
 
                 AVBUFFER_GETMETRICS(mAVBufferManager, secureDecode, beforeHeapMetrics);
@@ -229,31 +213,40 @@ public:
                 UT_ASSERT_TRUE(beforeHeapMetrics.bytesUsed == afterHeapMetrics.bytesUsed);
                 UT_ASSERT_TRUE(beforeHeapMetrics.bytesTotal == afterHeapMetrics.bytesTotal);
 
-                activeCodec = testConfig.codec;
-                streamExecutedOnDecoder = true;
+                isTestExecuted = true;
+
+                if (backPressureTest)
+                {
+                    // Back-pressure runs once per decoder, on the first stream it supports
+                    if (decodeTest->isBackPressureObserved())
+                    {
+                        mBackPressureObserved = true;
+                    }
+                    if (decodeTest->getOperationalMode() == OperationalMode::NON_TUNNELLED)
+                    {
+                        mBackPressureNonTunnelRun = true;
+                    }
+                    break;
+                }
             }
 
             if (decodeTest)
             {
                 decodeTest.reset();
             }
-
-            if (streamExecutedOnDecoder)
-            {
-                activeDecoders++;
-            }
         }
 
-        UT_ASSERT_TRUE(activeDecoders > 0) << "No decoders support the requested configuration";
+        return isTestExecuted;
     }
 
-    void runConcurrentDecode(videoDecoderTestConfiguration_t& testConfig, bool secureDecode, bool concurrentDecodeConsume)
+    /* Returns true if at least one decoder executed the stream (unsupported ones are skipped) */
+    bool runConcurrentDecode(videoDecoderTestConfiguration_t& testConfig, bool secureDecode, bool concurrentDecodeConsume)
     {
         std::vector<std::unique_ptr<videoDecoderTest>> decoderTests;
         std::vector<std::future<void>> futures;
         HeapMetrics beforeHeapMetrics, afterHeapMetrics;
         bool isSinkAttached = false;
-        int32_t activeDecoders = 0;
+        bool isTestExecuted = false;
 
         AVBUFFER_GETMETRICS(mAVBufferManager, secureDecode, beforeHeapMetrics);
 
@@ -276,10 +269,8 @@ public:
             futures.push_back(std::async(std::launch::async, &videoDecoderTest::run,
                                          decoderTest.get(), concurrentDecodeConsume));
             decoderTests.push_back(std::move(decoderTest));
-            activeDecoders++;
+            isTestExecuted = true;
         }
-
-        UT_ASSERT_TRUE(activeDecoders > 0) << "No decoders support the requested configuration";
 
         for (auto& f : futures)
         {
@@ -301,25 +292,17 @@ public:
         UT_ASSERT_TRUE(beforeHeapMetrics.secure == afterHeapMetrics.secure);
         UT_ASSERT_TRUE(beforeHeapMetrics.bytesUsed == afterHeapMetrics.bytesUsed);
         UT_ASSERT_TRUE(beforeHeapMetrics.bytesTotal == afterHeapMetrics.bytesTotal);
+
+        return isTestExecuted;
     }
 
     /* rdk-halif-aidl 0.23.0: tunnel / non-tunnel is selected by the vendor; each test reads the mode after start()
      * and validates against it, so there is one test per scenario instead of a Tunnel / NonTunnel pair. */
 
-    void runTest(const char *testName, bool secureMode, bool concurrentMode)
+    /* backPressureTest: send input until the decoder refuses a buffer and check onDecodeBufferAvailable(),
+     * instead of decoding and validating the stream (sequential, one stream per decoder) */
+    void runTest(const char *testName, bool secureMode, bool concurrentMode, bool backPressureTest = false)
     {
-        if (secureMode && !isSecureModeSupported()) {
-            UT_LOG_INFO("Skipping test '%s': Secure mode is not supported by any decoder", testName);
-            GTEST_SKIP() << "Secure mode is not supported by any decoder";
-            return;
-        }
-
-        if (strcmp(testName, "Decode_BackPressure_Callback") == 0)
-        {
-            runBackPressureDecode();
-            return;
-        }
-
         vector<videoDecoderTestConfiguration_t> testConfiguration;
 
         UT_status_t status = vts_videodecoder_parse_testconfig(gVideoDecoderTestConfiguration, VIDEODECODERMGR, gTestGroup, testName, testConfiguration);
@@ -330,66 +313,42 @@ public:
             return;
         }
 
+        bool isTestExecuted = false;
         if (concurrentMode)
         {
             for (auto& test : testConfiguration)
             {
-                runConcurrentDecode(test, secureMode, true);
+                if (runConcurrentDecode(test, secureMode, true))
+                {
+                    isTestExecuted = true;
+                }
             }
         }
         else
         {
-            runSequentialDecode(testConfiguration, secureMode, true);
+            mBackPressureObserved = false;
+            mBackPressureNonTunnelRun = false;
+            isTestExecuted = runSequentialDecode(testConfiguration, secureMode, true, backPressureTest);
         }
-    }
 
-    void runBackPressureDecode()
-    {
-        int activeDecoders = 0;
-        int decodersWithBackPressure = 0;
-
-        // Use a real stream so the decoder actually queues the input instead of rejecting it.
-        vector<videoDecoderTestConfiguration_t> testConfiguration;
-        UT_status_t status = vts_videodecoder_parse_testconfig(gVideoDecoderTestConfiguration, VIDEODECODERMGR, gTestGroup,
-                                                               "Decode_BackPressure_Callback", testConfiguration);
-        if (status != UT_STATUS_OK || testConfiguration.empty())
+        /* Skip (not fail) when no decoder supports any configuration of this test, e.g. codec or secure not supported */
+        if (!isTestExecuted)
         {
-            UT_ASSERT_TRUE(false) << "Test configuration parsing failed for Decode_BackPressure_Callback";
-            return;
+            UT_LOG_INFO("Skipping test '%s': No valid test configuration executed", testName);
+            GTEST_SKIP() << "No valid test configuration executed";
         }
 
-        for (const auto& [_decoderId, decoderHandle, controlListener, eventListener, capabilities] : mVideoDecoderList)
+        if (backPressureTest && !mBackPressureObserved)
         {
-            if (!decoderHandle || !capabilities || capabilities->supportedCodecs.empty())
+            /* Back-pressure is forced by holding output frames, which is only possible in NON_TUNNELLED mode */
+            if (!mBackPressureNonTunnelRun)
             {
-                UT_LOG_WARNING("[DecoderID: %d] Missing decoder handle/capability data, skipping callback test", _decoderId.value);
-                continue;
+                UT_LOG_INFO("Skipping test '%s': back-pressure cannot be forced in TUNNELLED mode", testName);
+                GTEST_SKIP() << "Back-pressure cannot be forced in TUNNELLED mode";
             }
-
-            auto config = std::find_if(testConfiguration.begin(), testConfiguration.end(),
-                                       [&](const videoDecoderTestConfiguration_t& c)
-                                       { return checkDecoderSupportsConfig(_decoderId, capabilities, c, false); });
-            if (config == testConfiguration.end())
-            {
-                UT_LOG_WARNING("[DecoderID: %d] No supported stream for callback test, skipping", _decoderId.value);
-                continue;
-            }
-
-            activeDecoders++;
-
-            videoDecoderTest decodeTest(_decoderId, decoderHandle, controlListener,
-                                        eventListener, mAVBufferManager, false,
-                                        *config, mAVbufferHelper, false);
-
-            if (decodeTest.runBackPressureTest())
-            {
-                decodersWithBackPressure++;
-            }
+            UT_ASSERT_TRUE(mBackPressureObserved)
+                << "Back-pressure was not observed on any decoder; onDecodeBufferAvailable semantics could not be validated";
         }
-
-        UT_ASSERT_TRUE(activeDecoders > 0) << "No active decoders available for callback test";
-        UT_ASSERT_TRUE(decodersWithBackPressure > 0)
-            << "Back-pressure was not observed on any decoder; onDecodeBufferAvailable semantics could not be validated";
     }
 
     void TearDown() override
@@ -1150,7 +1109,7 @@ UT_ADD_TEST(VTS_L3_VideoDecoder, VDecode_Concurrent_Secure_Error)
  */
 UT_ADD_TEST(VTS_L3_VideoDecoder, VDecode_BackPressure_Callback)
 {
-    runTest("Decode_BackPressure_Callback", false, false);
+    runTest("Decode_BackPressure_Callback", false, false, true);
 }
 
 /** @} */ // End of VIDEO_DECODER_HALTEST_L3 File

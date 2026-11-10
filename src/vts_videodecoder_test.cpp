@@ -53,6 +53,13 @@
 using namespace std::chrono;
 using namespace std;
 
+/* Back-pressure test limits (sendUntilBackPressure) */
+static constexpr size_t  VIDEO_BACKPRESSURE_MAX_SUBMISSIONS        = 512;         // input buffers sent before giving up
+static constexpr int64_t VIDEO_BACKPRESSURE_LOOP_PTS_GAP_NS        = 1000000000;  // 1 s PTS gap each time the stream repeats
+static constexpr int     VIDEO_BACKPRESSURE_CALLBACK_WAIT_MS       = 5000;        // max wait for onDecodeBufferAvailable()
+static constexpr int     VIDEO_BACKPRESSURE_DRAIN_STEP_MS          = 50;          // free output frames every 50 ms while waiting
+static constexpr int     VIDEO_BACKPRESSURE_EXTRA_CALLBACK_WAIT_MS = 500;         // wait for any extra (duplicate) callback
+
 // AVBufferSpaceListener implementation
 Status AVBufferSpaceListener::onSpaceAvailable()
 {
@@ -90,23 +97,33 @@ void videoDecoderTest::run(bool concurrentDecodeConsume)
         if(mVideoDecoderController.get() == nullptr)
         {
             UT_ASSERT_TRUE(false) << "Decoder session is not available";
+            // open() failed, so only the pool needs to be released
+            AVBUFFER_DESTROY_POOL_SUCCESS(mAVBufferManager, mVideoPool);
             return;
         }
 
-        // onFrameOutput() is delivered in both modes (IVideoDecoderControllerListener); in TUNNELLED mode the
-        // buffer handle is -1, which validateDecodedFrame() checks against the mode read above.
-        if(!mIsSinkAttached)
+        if (mBackPressureTest)
         {
-            // If sink is not attached, we need to validate decoded frames in a separate thread
-            consumerThread = thread(&videoDecoderTest::validateDecodedFrame, this);
+            // Back-pressure: no frame validation; send until a buffer is refused and check the callback
+            mBackPressureObserved = sendUntilBackPressure();
         }
-
-        startDecoding();
-
-        if(!mIsSinkAttached && consumerThread.joinable())
+        else
         {
-            // If sink is not attached, we need to validate decoded frames here
-            consumerThread.join();
+            // onFrameOutput() is delivered in both modes (IVideoDecoderControllerListener); in TUNNELLED mode the
+            // buffer handle is -1, which validateDecodedFrame() checks against the mode read above.
+            if(!mIsSinkAttached)
+            {
+                // If sink is not attached, we need to validate decoded frames in a separate thread
+                consumerThread = thread(&videoDecoderTest::validateDecodedFrame, this);
+            }
+
+            startDecoding();
+
+            if(!mIsSinkAttached && consumerThread.joinable())
+            {
+                // If sink is not attached, we need to validate decoded frames here
+                consumerThread.join();
+            }
         }
 
         // Keep decoder running while sink consumes output frames.
@@ -792,147 +809,140 @@ bool videoDecoderTest::validateDecodedFrame()
     return true;
 }
 
-bool videoDecoderTest::runBackPressureTest()
+/* Called from run() for a back-pressure test, with the decoder open and started.
+ *  1. Fill:  hold output frames and send input until the decoder refuses a buffer.
+ *  2. Check: onDecodeBufferAvailable() must arrive exactly once, and not before the refusal.
+ *  3. Stop:  stop the decoder and free any held output frames (the caller closes the session).
+ * Returns true if back-pressure was observed. */
+bool videoDecoderTest::sendUntilBackPressure()
 {
     mControlListener->resetQueues();
     mControlListener->resetDecodeBufferAvailableCount();
 
-    mFrameData.clear();
-    mInputBuffer.clear();
-    if (!makeFrame())
+    int callbackCountBeforeRefusal = 0;
+    const bool backPressureObserved = fillUntilRefused(callbackCountBeforeRefusal);
+
+    if (backPressureObserved)
     {
-        UT_ASSERT_TRUE(false) << "Failed to prepare frame data for back-pressure test";
-        return false;
+        checkDecodeBufferAvailableCallback(callbackCountBeforeRefusal);
+    }
+    else if (mOperationMode == OperationalMode::TUNNELLED)
+    {
+        // Output frames go to the vendor's internal path, so the test cannot hold them to stall the decoder
+        UT_LOG_WARNING("[DecoderID: %d] Back-pressure not observed in TUNNELLED mode (cannot be forced); callback semantics not asserted",
+                       mDecoderId.value);
+    }
+    else
+    {
+        UT_LOG_WARNING("[DecoderID: %d] Back-pressure not observed within %zu submissions; callback semantics not asserted on this decoder",
+                       mDecoderId.value, VIDEO_BACKPRESSURE_MAX_SUBMISSIONS);
     }
 
-    setupVideoDecoder();
-    if (mVideoDecoderController.get() == nullptr)
-    {
-        // open() failed, so only the pool needs to be released.
-        AVBUFFER_DESTROY_POOL_SUCCESS(mAVBufferManager, mVideoPool);
-        return false;
-    }
+    teardownDecoder(false);
+    freeHeldOutputFrames();
+    return backPressureObserved;
+}
 
-    bool backPressureObserved = false;
-    bool callbackObserved = false;
-    // Callback count just before the rejected send, so only a new callback counts.
-    int callbackBaseline = 0;
-
-    auto freeIfRejected = [&](int64_t bufferHandle, const Status& decodeStatus, bool decodeAccepted)
-    {
-        if (!decodeAccepted || !decodeStatus.isOk() || decodeStatus.exceptionCode() != Status::EX_NONE)
-        {
-            AVBUFFER_FREE_SUCCESS(mAVBufferManager, bufferHandle);
-        }
-    };
-
-    // Output frames are not freed while feeding, so the decoder stalls and its input queue fills up.
-    auto freeOutputFrames = [&]()
-    {
-        DecodedVideoFrame_t decodedFrame;
-        while (mControlListener->getNextFrame(decodedFrame, std::chrono::milliseconds(0)))
-        {
-            if (decodedFrame.frameAVBufferHandle == -1)
-            {
-                continue;
-            }
-            bool isBufferValid = false;
-            AVBUFFER_ISVALID_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle, isBufferValid);
-            if (isBufferValid)
-            {
-                AVBUFFER_FREE_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle);
-            }
-        }
-    };
-
-    // The stream is short, so send it again in a loop with later PTS values until the decoder is full.
-    static constexpr size_t kMaxProbeSubmissions = 512;
+/* Sends the stream repeatedly (later PTS each loop) without freeing output frames, so the decoder stalls.
+ * Returns true when decodeBufferWithMetadata() refuses a buffer; callbackCountBeforeRefusal is the
+ * onDecodeBufferAvailable() count just before that refused send. */
+bool videoDecoderTest::fillUntilRefused(int& callbackCountBeforeRefusal)
+{
     int64_t maxPts = 0;
     for (const auto& frame : mFrameData)
     {
         maxPts = std::max(maxPts, std::get<2>(frame));
     }
-    const int64_t loopPtsStep = maxPts + 1000000000; // 1 second gap between loops
+    const int64_t loopPtsStep = maxPts + VIDEO_BACKPRESSURE_LOOP_PTS_GAP_NS;
 
-    for (size_t i = 0; i < kMaxProbeSubmissions; ++i)
+    for (size_t i = 0; i < VIDEO_BACKPRESSURE_MAX_SUBMISSIONS; ++i)
     {
         const auto& [frameOffset, frameSize, streamPTS, isErrorFrame] = mFrameData[i % mFrameData.size()];
-        const int64_t framePTS = streamPTS + static_cast<int64_t>(i / mFrameData.size()) * loopPtsStep;
 
-        int64_t videoBufferHandle = 0;
-        AVBUFFER_ALLOC_SUCCESS(mAVBufferManager, mVideoPool, frameSize, videoBufferHandle);
+        /* Allocate an input buffer and copy the frame into it */
+        int64_t bufferHandle = 0;
+        AVBUFFER_ALLOC_SUCCESS(mAVBufferManager, mVideoPool, frameSize, bufferHandle);
 
-        void* mapBuffer = nullptr;
         uint32_t mapSize = 0;
-        mapBuffer = mAVbufferHelper->mapHandle(videoBufferHandle, &mapSize);
-        if (mapBuffer && mapSize >= frameSize)
+        void* mapBuffer = mAVbufferHelper->mapHandle(bufferHandle, &mapSize);
+        if (mapBuffer == nullptr || mapSize < frameSize)
         {
-            memcpy(mapBuffer, mInputBuffer.data() + frameOffset, frameSize);
-            mAVbufferHelper->unmapHandle(videoBufferHandle);
-        }
-        else
-        {
-            if (mapBuffer) mAVbufferHelper->unmapHandle(videoBufferHandle);
-            AVBUFFER_FREE_SUCCESS(mAVBufferManager, videoBufferHandle);
+            if (mapBuffer) mAVbufferHelper->unmapHandle(bufferHandle);
+            AVBUFFER_FREE_SUCCESS(mAVBufferManager, bufferHandle);
             UT_ASSERT_TRUE(false) << "Failed to map input buffer for back-pressure test";
-            break;
+            return false;
         }
+        memcpy(mapBuffer, mInputBuffer.data() + frameOffset, frameSize);
+        mAVbufferHelper->unmapHandle(bufferHandle);
 
+        /* Send it; a refused buffer stays with the caller and is freed here */
         videodecoder::InputBufferMetadata metadata = {};
-        metadata.nsPresentationTime = framePTS;
+        metadata.nsPresentationTime = streamPTS + static_cast<int64_t>(i / mFrameData.size()) * loopPtsStep;
 
-        bool decodeResult = false;
-        callbackBaseline = mControlListener->getDecodeBufferAvailableCount();
-        Status status = mVideoDecoderController->decodeBufferWithMetadata(videoBufferHandle, metadata, &decodeResult);
-        freeIfRejected(videoBufferHandle, status, decodeResult);
+        bool accepted = false;
+        callbackCountBeforeRefusal = mControlListener->getDecodeBufferAvailableCount();
+        Status status = mVideoDecoderController->decodeBufferWithMetadata(bufferHandle, metadata, &accepted);
+        if (!accepted || !status.isOk() || status.exceptionCode() != Status::EX_NONE)
+        {
+            AVBUFFER_FREE_SUCCESS(mAVBufferManager, bufferHandle);
+        }
         UT_ASSERT_TRUE(status.isOk()) << "decodeBufferWithMetadata binder call failed while probing back-pressure";
         UT_ASSERT_EQUAL(status.exceptionCode(), Status::EX_NONE);
 
-        if (!decodeResult)
+        if (!accepted)
         {
-            backPressureObserved = true;
-            break;
+            return true;
         }
     }
-
-    if (backPressureObserved)
-    {
-        // Per spec, onDecodeBufferAvailable() is only fired after a refused buffer, so none may arrive
-        // while every earlier buffer was accepted.
-        UT_ASSERT_EQUAL(callbackBaseline, 0) << "onDecodeBufferAvailable fired before any buffer was refused";
-
-        // Release held output frames so the decoder can drain its input queue. Keep draining while
-        // waiting, since newly decoded frames would otherwise refill the output pool and stall it again.
-        const auto callbackDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
-        do
-        {
-            freeOutputFrames();
-            callbackObserved = mControlListener->waitForDecodeBufferAvailable(callbackBaseline + 1, std::chrono::milliseconds(50));
-        } while (!callbackObserved && std::chrono::steady_clock::now() < callbackDeadline);
-        UT_ASSERT_TRUE(callbackObserved) << "onDecodeBufferAvailable was not received after back-pressure";
-
-        if (callbackObserved)
-        {
-            // Per spec, the callback fires exactly once per back-pressure episode. No buffer is sent after
-            // the refusal, so give any extra callback time to arrive, then check only one was delivered.
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            UT_ASSERT_EQUAL(mControlListener->getDecodeBufferAvailableCount(), callbackBaseline + 1)
-                << "onDecodeBufferAvailable fired more than once for one back-pressure episode";
-        }
-    }
-
-    teardownDecoder();
-    freeOutputFrames();
-    closeDecoderSession();
-
-    if (backPressureObserved)
-    {
-        return true;
-    }
-
-    UT_LOG_WARNING("[DecoderID: %d] Back-pressure not observed within %zu submissions; callback semantics not asserted on this decoder",
-                   mDecoderId.value, kMaxProbeSubmissions);
     return false;
+}
+
+/* Spec (IVideoDecoderControllerListener.onDecodeBufferAvailable): fired only after a refused buffer,
+ * and exactly once per back-pressure episode. */
+void videoDecoderTest::checkDecodeBufferAvailableCallback(int callbackCountBeforeRefusal)
+{
+    // No callback may arrive while every earlier buffer was accepted
+    UT_ASSERT_EQUAL(callbackCountBeforeRefusal, 0) << "onDecodeBufferAvailable fired before any buffer was refused";
+
+    // Free held output frames so the decoder drains its input queue. Keep freeing while waiting,
+    // since newly decoded frames would otherwise refill the output pool and stall it again.
+    bool callbackReceived = false;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(VIDEO_BACKPRESSURE_CALLBACK_WAIT_MS);
+    do
+    {
+        freeHeldOutputFrames();
+        callbackReceived = mControlListener->waitForDecodeBufferAvailable(callbackCountBeforeRefusal + 1,
+                                                                          std::chrono::milliseconds(VIDEO_BACKPRESSURE_DRAIN_STEP_MS));
+    } while (!callbackReceived && std::chrono::steady_clock::now() < deadline);
+    UT_ASSERT_TRUE(callbackReceived) << "onDecodeBufferAvailable was not received after back-pressure";
+    if (!callbackReceived)
+    {
+        return;
+    }
+
+    // No buffer is sent after the refusal, so give any extra callback time to arrive, then check only one came
+    std::this_thread::sleep_for(std::chrono::milliseconds(VIDEO_BACKPRESSURE_EXTRA_CALLBACK_WAIT_MS));
+    UT_ASSERT_EQUAL(mControlListener->getDecodeBufferAvailableCount(), callbackCountBeforeRefusal + 1)
+        << "onDecodeBufferAvailable fired more than once for one back-pressure episode";
+}
+
+/* Frees the decoded output frames held during the back-pressure test (tunnelled frames have handle -1) */
+void videoDecoderTest::freeHeldOutputFrames()
+{
+    DecodedVideoFrame_t decodedFrame;
+    while (mControlListener->getNextFrame(decodedFrame, std::chrono::milliseconds(0)))
+    {
+        if (decodedFrame.frameAVBufferHandle == -1)
+        {
+            continue;
+        }
+        bool isBufferValid = false;
+        AVBUFFER_ISVALID_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle, isBufferValid);
+        if (isBufferValid)
+        {
+            AVBUFFER_FREE_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle);
+        }
+    }
 }
 
 void videoDecoderTest:: teardownDecoder(bool closeDecoderSession)
