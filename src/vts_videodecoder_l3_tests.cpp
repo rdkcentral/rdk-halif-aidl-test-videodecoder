@@ -89,7 +89,7 @@ public:
 
     vector<tuple<IVideoDecoder::Id, sp<IVideoDecoder>, sp<VideoDecoderControllerListener>, sp<VideoDecoderEventListener>, videodecoder::Capabilities *>> mVideoDecoderList;
     sp<IAVBuffer> mAVBufferManager;
-    IAVBufferHelper* mAVbufferHelper;
+    IAVBufferHelper* mAVbufferHelper = nullptr;
     bool mBackPressureObserved = false;      // set by runSequentialDecode() in a back-pressure test
     bool mBackPressureNonTunnelRun = false;  // a back-pressure run used NON_TUNNELLED (back-pressure can be forced)
 
@@ -360,9 +360,12 @@ public:
         }
         mVideoDecoderList.clear();
 
-        /* rdk-halif-aidl 0.23.0: release the AV Buffer helper instance taken in SetUp() */
-        releaseAVBufferHelperInstance(mAVbufferHelper);
-        mAVbufferHelper = nullptr;
+        /* rdk-halif-aidl 0.23.0: release the AV Buffer helper instance taken in SetUp() (null if SetUp() failed early) */
+        if (mAVbufferHelper != nullptr)
+        {
+            releaseAVBufferHelperInstance(mAVbufferHelper);
+            mAVbufferHelper = nullptr;
+        }
     }
 };
 
