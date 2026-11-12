@@ -425,6 +425,7 @@ UT_ADD_TEST(VTS_L1_VideoDecoder,getVideoDecoder_pos)
  * | 02 | Call getVideoDecoder with invalid Video Decoder ID | input: invalidDecoderId, output: videoDecoder | videoDecoder should be nullptr, status.exceptionCode() should be EX_ILLEGAL_ARGUMENT | Should Fail |
  * | 03 | Initialize a valid Video Decoder ID from configuration | validDecoderId.value = UT_KVP_PROFILE_GET_UINT32("IVideoDecoderManager.IVideoDecoder.<index>.0") | Should be successful | Should be successful |
  * | 04 | Call getVideoDecoder with a valid Video Decoder ID and null videoDecoder instance | input: validDecoderId, output: nullptr | videoDecoder should be nullptr, status.exceptionCode() should be EX_NULL_POINTER | Should Fail |
+ * | 05 | Call getVideoDecoder with the EXTERNAL ID (non-HAL source sentinel, rdk-halif-aidl 0.23.0) | invalidDecoderId.value = IVideoDecoder::Id::EXTERNAL | videoDecoder should be nullptr | Should Fail |
  */
 
 UT_ADD_TEST(VTS_L1_VideoDecoder,getVideoDecoder_neg)
@@ -453,6 +454,12 @@ UT_ADD_TEST(VTS_L1_VideoDecoder,getVideoDecoder_neg)
     invalidDecoderId.value = IVideoDecoder::Id::UNDEFINED; // Using UNDEFINED as invalid ID
 
     VIDEODECODER_MANAGER_GETVIDEODECODER_FAILURE(invalidDecoderId, videoDecoder);
+
+    // Test Case 2: EXTERNAL (rdk-halif-aidl 0.23.0) marks a non-HAL source for a video sink, not a real decoder
+    IVideoDecoder::Id externalDecoderId;
+    externalDecoderId.value = IVideoDecoder::Id::EXTERNAL;
+
+    VIDEODECODER_MANAGER_GETVIDEODECODER_FAILURE(externalDecoderId, videoDecoder);
 
 }
 
