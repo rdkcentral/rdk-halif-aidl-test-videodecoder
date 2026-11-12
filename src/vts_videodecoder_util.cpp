@@ -190,7 +190,7 @@ Colorimetry videoDecoderColorimetryPresetToColorimetry(const std::string& preset
     };
     static const std::unordered_map<std::string, Colorimetry> presetMap = {
         {"BT601_525", makeColorimetry(ColorRange::LIMITED, ColorMatrix::BT601_525,  TransferCharacteristics::SMPTE170M, ColorPrimaries::BT601_525)},
-        {"BT601_625", makeColorimetry(ColorRange::LIMITED, ColorMatrix::BT601_625,  TransferCharacteristics::SMPTE170M, ColorPrimaries::BT470BG)},
+        {"BT601_625", makeColorimetry(ColorRange::LIMITED, ColorMatrix::BT601_625,  TransferCharacteristics::BT470BG_GAMMA28, ColorPrimaries::BT470BG)},
         {"BT709",     makeColorimetry(ColorRange::LIMITED, ColorMatrix::BT709,      TransferCharacteristics::BT709,     ColorPrimaries::BT709)},
         {"BT2020",    makeColorimetry(ColorRange::LIMITED, ColorMatrix::BT2020_NCL, TransferCharacteristics::BT2020_10, ColorPrimaries::BT2020)}
     };
@@ -1165,7 +1165,20 @@ void vts_videodecoder_helper_validateCapabilities(
                     });
                 if (it == hfpDecoder.supportedColorimetries.end())
                 {
-                    UT_LOG_ERROR("Colorimetry not found in hfpDecoder for decoder ID: %d", decoderId);
+                    UT_LOG_ERROR("Colorimetry not found in hfpDecoder for decoder ID %d: range=%d, matrix=%d, transfer=%d, primaries=%d",
+                                 decoderId,
+                                 static_cast<int32_t>(colorimetry.range),
+                                 static_cast<int32_t>(colorimetry.matrix),
+                                 static_cast<int32_t>(colorimetry.transfer),
+                                 static_cast<int32_t>(colorimetry.primaries));
+                    for (const auto& hfpColorimetry : hfpDecoder.supportedColorimetries)
+                    {
+                        UT_LOG_ERROR("HFP colorimetry candidate: range=%d, matrix=%d, transfer=%d, primaries=%d",
+                                     static_cast<int32_t>(hfpColorimetry.range),
+                                     static_cast<int32_t>(hfpColorimetry.matrix),
+                                     static_cast<int32_t>(hfpColorimetry.transfer),
+                                     static_cast<int32_t>(hfpColorimetry.primaries));
+                    }
                     UT_ASSERT_TRUE(false) << "Colorimetry not found in hfpDecoder";
                     continue;
                 }
