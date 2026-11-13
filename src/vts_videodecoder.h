@@ -416,7 +416,7 @@ bool checkDecoderSupportsConfig(const IVideoDecoder::Id& decoderId, const videod
     } while (0)
 
 /**
- * @brief Calls getSupportedOperationalModes and verifies a non-empty list is returned.
+ * @brief Calls getCurrentOperationalMode() (rdk-halif-aidl 0.23.0) and verifies it succeeds.
  * @param[in]  videoDecoder The IVideoDecoder instance.
  * @param[out] mode Operational mode currently selected by the vendor.
  * @pre The decoder must be in State::STARTED (otherwise EX_ILLEGAL_STATE).
@@ -1763,14 +1763,7 @@ public:
         mEventListener->setDecoderID(decoderId.value);
         mControlListener->setDecoderID(decoderId.value);
     }
-    void run(bool concurrentDecodeConsume);
-    /* Back-pressure run: run() sends input until the decoder refuses a buffer and checks
-     * onDecodeBufferAvailable(), instead of decoding and validating the stream */
-    void setBackPressureTest(bool enable) { mBackPressureTest = enable; }
-    bool isBackPressureObserved() const { return mBackPressureObserved; }
-    /* Operational mode selected by the vendor, read after start() (rdk-halif-aidl 0.23.0) */
-    OperationalMode getOperationalMode() const { return mOperationMode; }
-    void setTestConfiguration(const videoDecoderTestConfiguration_t& config);
+    void run();
     void closeDecoderSession();
     void getDecoderMetrics(int32_t &framesDecoded, int32_t &decodeErrors, int32_t &framesDropped);
     std::vector<std::tuple<uint64_t, uint32_t, int64_t>> parseFrames(
@@ -1782,10 +1775,9 @@ private:
     bool mSecureDecode;
     // Operational mode selected by the vendor (read after start(); rdk-halif-aidl 0.23.0)
     OperationalMode mOperationMode = OperationalMode::NON_TUNNELLED;
-    bool mConcurrentDecodeConsume = false;
     bool mIsSinkAttached;
-    bool mBackPressureTest = false;
-    bool mBackPressureObserved = false;
+    // Times decodeBufferWithMetadata() returned false (input queue full); must stay 0 (same as audio decoder test)
+    int32_t mDecodeQueueFullCount = 0;
     videoDecoderTestConfiguration_t mTestConfiguration;
     sp<IVideoDecoder> mDecoderHandle;
     sp<VideoDecoderControllerListener> mControlListener;
@@ -1807,16 +1799,12 @@ private:
     bool makeFrame();
     void setupVideoDecoder();
     // Helpers for setupVideoDecoder(), one per setup concern:
-    void openOrReuseVideoDecoder();
+    void openVideoDecoder();
     void buildAndApplyStreamConfig();
     void applyDecodeErrorPolicyIfNeeded();
     void applyLowLatencyModeIfNeeded();
     void startDecoding();
-    bool sendUntilBackPressure();
-    // Helpers for sendUntilBackPressure():
-    bool fillUntilRefused(int& callbackCountBeforeRefusal);
-    void checkDecodeBufferAvailableCallback(int callbackCountBeforeRefusal);
-    void freeHeldOutputFrames();
+    void submitFrame(int64_t bufferHandle, const videodecoder::InputBufferMetadata& metadata);
     bool validateDecodedFrame();
     // Helpers for validateDecodedFrame(), one per validation concern:
     bool validateFrameLatencyAndBuffer(const DecodedVideoFrame_t& decodedFrame, std::set<int64_t>& receivedPts,
