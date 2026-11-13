@@ -83,7 +83,6 @@ public:
     static char const* getServiceName() { return IVideoDecoderManager::serviceName().c_str(); }
 
     android::binder::Status getVideoDecoderIds(std::vector<IVideoDecoder::Id>* _aidl_return) override;
-    android::binder::Status getSupportedOperationalModes(std::vector<OperationalMode>* _aidl_return) override;
     android::binder::Status getVideoDecoder(const IVideoDecoder::Id& videoDecoderId, android::sp<IVideoDecoder>* _aidl_return) override;
 };
 
@@ -127,6 +126,7 @@ public:
     android::binder::Status getProperty(videodecoder::Property property, std::optional<PropertyValue>* _aidl_return) override;
     android::binder::Status getPropertyMulti(const std::vector<videodecoder::Property>& properties, std::vector<videodecoder::PropertyKVPair>* propertyKVList, bool* _aidl_return) override;
     android::binder::Status getState(State* _aidl_return) override;
+    android::binder::Status getCurrentOperationalMode(OperationalMode* _aidl_return) override;
     android::binder::Status open(videodecoder::Codec codec, bool secure, const android::sp<videodecoder::IVideoDecoderControllerListener>& videoDecoderControllerListener, android::sp<videodecoder::IVideoDecoderController>* _aidl_return) override;
     android::binder::Status openWithResolution(videodecoder::Codec codec, bool secure, const android::sp<videodecoder::IVideoDecoderControllerListener>& videoDecoderControllerListener, int32_t maxWidth, int32_t maxHeight, android::sp<videodecoder::IVideoDecoderController>* _aidl_return) override;
     android::binder::Status close(const android::sp<videodecoder::IVideoDecoderController>& videoDecoderController, bool* _aidl_return) override;

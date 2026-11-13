@@ -53,6 +53,9 @@
 using namespace std::chrono;
 using namespace std;
 
+/* Max wait for onDecodeBufferAvailable() after decodeBufferWithMetadata() returns false (input queue full) */
+static constexpr int VIDEO_DECODE_BUFFER_AVAILABLE_WAIT_MS = 5000;
+
 // AVBufferSpaceListener implementation
 Status AVBufferSpaceListener::onSpaceAvailable()
 {
@@ -60,70 +63,63 @@ Status AVBufferSpaceListener::onSpaceAvailable()
 }
 
 // videoDecoderTest method implementations
-void videoDecoderTest::run(bool concurrentDecodeConsume)
+void videoDecoderTest::run()
 {
-    thread consumerThread;
-
-    if (!mAVbufferHelper)
-    {
-        UT_ASSERT_TRUE(false) << "AVBufferHelper is not initialized";
-        return;
-    }
-
     mFrameData.clear();
     mInputBuffer.clear();
     mInputFrame.clear();
 
-    bool status = makeFrame();
-    if (!status)
+    if (!makeFrame())
     {
         UT_ASSERT_TRUE(false) << "Failed to prepare frame data for decoding";
         return;
     }
 
-    if (concurrentDecodeConsume)
+    // Opens and starts the decoder and reads the vendor-selected mode (no input is sent yet)
+    setupVideoDecoder();
+    if (mVideoDecoderController.get() == nullptr)
     {
-        if(!mIsSinkAttached)
-        {
-            // If sink is not attached, we need to validate decoded frames in a separate thread
-            consumerThread = thread(&videoDecoderTest::validateDecodedFrame, this);
-        }
-        setupVideoDecoder();
-
-        if(mVideoDecoderController.get() == nullptr)
-        {
-            UT_ASSERT_TRUE(false) << "Decoder session is not available";
-            if(!mIsSinkAttached && consumerThread.joinable())
-            {
-                consumerThread.join();
-            }
-            return;
-        }
-
-        startDecoding();
-
-        if(!mIsSinkAttached && consumerThread.joinable())
-        {
-            // If sink is not attached, we need to validate decoded frames here
-            consumerThread.join();
-        }
-
-        // Keep decoder running while sink consumes output frames.
-        // Session close/cleanup is handled explicitly by the caller.
-        if (!mIsSinkAttached)
-        {
-            teardownDecoder(false);
-        }
+        UT_ASSERT_TRUE(false) << "Decoder session is not available";
+        // open() failed, so only the pool needs to be released
+        AVBUFFER_DESTROY_POOL_SUCCESS(mAVBufferManager, mVideoPool);
+        return;
     }
-    else
+
+    // onFrameOutput() is delivered in both modes (IVideoDecoderControllerListener); in TUNNELLED mode the
+    // buffer handle is -1, which validateDecodedFrame() checks against the mode read above.
+    // With a sink attached, the sink consumes the decoded frames instead.
+    thread consumerThread;
+    if (!mIsSinkAttached)
     {
-        //TODO: Not used currently, update implementation if required in future
+        consumerThread = thread(&videoDecoderTest::validateDecodedFrame, this);
     }
-}
 
-void videoDecoderTest::setTestConfiguration(const videoDecoderTestConfiguration_t& config)
-{
-    mTestConfiguration = config;
+    startDecoding();
+
+    if (consumerThread.joinable())
+    {
+        consumerThread.join();
+    }
+
+    /* onDecodeBufferAvailable and queue-full compliance (same as the audio decoder test).
+     * Per spec (IVideoDecoderControllerListener) the callback is not fired in steady-state operation, only
+     * after a refused buffer, so both counts must be 0 for a decoder that keeps up with the input. */
+    const int decodeBufferAvailableCount = mControlListener->getDecodeBufferAvailableCount();
+    if (mDecodeQueueFullCount > 0 || decodeBufferAvailableCount > 0)
+    {
+        UT_LOG_ERROR("[DecoderID: %d] HAL input queue filled during decode: decodeBufferWithMetadata returned false "
+                     "%d time(s), onDecodeBufferAvailable fired %d time(s)",
+                     mDecoderId.value, mDecodeQueueFullCount, decodeBufferAvailableCount);
+    }
+    UT_ASSERT_EQUAL(mDecodeQueueFullCount, 0);
+    UT_ASSERT_EQUAL(decodeBufferAvailableCount, 0);
+
+    // With a sink attached the decoder keeps running until the sink has consumed every frame;
+    // the caller stops and closes the session afterwards.
+    if (!mIsSinkAttached)
+    {
+        teardownDecoder(false);
+    }
 }
 
 void videoDecoderTest::closeDecoderSession()
@@ -156,48 +152,27 @@ void videoDecoderTest::getDecoderMetrics(int32_t &framesDecoded, int32_t &decode
     }
 }
 
-void videoDecoderTest::openOrReuseVideoDecoder()
+void videoDecoderTest::openVideoDecoder()
 {
-    if (mVideoDecoderController.get() == nullptr)
+    mBufferListener = new AVBufferSpaceListener();
+
+    // Create Video Pool
+    AVBUFFER_CREATE_VIDEOPOOL_SUCCESS(mAVBufferManager, mSecureDecode, mDecoderId, mBufferListener, mVideoPool);
+
+    // Open Decoder — use openWithResolution() when hint dimensions are set in the test config
+    if (mTestConfiguration.openWithResolutionWidth != -1 && mTestConfiguration.openWithResolutionHeight != -1)
     {
-        mBufferListener = new AVBufferSpaceListener();
-
-        // Create Video Pool
-        AVBUFFER_CREATE_VIDEOPOOL_SUCCESS(mAVBufferManager, mSecureDecode, mDecoderId, mBufferListener, mVideoPool);
-
-        // Open Decoder — use openWithResolution() when hint dimensions are set in the test config
-        if (mTestConfiguration.openWithResolutionWidth != -1 && mTestConfiguration.openWithResolutionHeight != -1)
-        {
-            UT_LOG_INFO("Opening decoder via openWithResolution(%dx%d)",
-                        mTestConfiguration.openWithResolutionWidth, mTestConfiguration.openWithResolutionHeight);
-            VIDEODECODER_OPEN_WITH_RESOLUTION_SUCCESS(
-                mDecoderHandle, mTestConfiguration.codec, mSecureDecode, mControlListener,
-                mTestConfiguration.openWithResolutionWidth, mTestConfiguration.openWithResolutionHeight,
-                mVideoDecoderController, true);
-        }
-        else
-        {
-            VIDEODECODER_OPEN_SUCCESS(mDecoderHandle, mTestConfiguration.codec, mSecureDecode,
-                                      mControlListener, mVideoDecoderController, true);
-        }
+        UT_LOG_INFO("Opening decoder via openWithResolution(%dx%d)",
+                    mTestConfiguration.openWithResolutionWidth, mTestConfiguration.openWithResolutionHeight);
+        VIDEODECODER_OPEN_WITH_RESOLUTION_SUCCESS(
+            mDecoderHandle, mTestConfiguration.codec, mSecureDecode, mControlListener,
+            mTestConfiguration.openWithResolutionWidth, mTestConfiguration.openWithResolutionHeight,
+            mVideoDecoderController, true);
     }
     else
     {
-        UT_LOG_INFO("Reusing open decoder for stream %s with codec %s",
-                    mTestConfiguration.streamName.c_str(),
-                    videodecoder::toString(mTestConfiguration.codec).c_str());
-    }
-}
-
-void videoDecoderTest::applyTunnelModePropertyIfNeeded()
-{
-    if (mTunnelMode)
-    {
-        std::vector<std::pair<videodecoder::Property, int32_t>> startedIntProps = {
-            {videodecoder::Property::OPERATIONAL_MODE, static_cast<int32_t>(OperationalMode::TUNNELLED)}
-        };
-        UT_LOG_DEBUG("Set properties in TUNNELLED Mode");
-        VIDEODECODER_SETPROPERTY_LIST_SUCCESS(mVideoDecoderController, startedIntProps, intValue);
+        VIDEODECODER_OPEN_SUCCESS(mDecoderHandle, mTestConfiguration.codec, mSecureDecode,
+                                  mControlListener, mVideoDecoderController, true);
     }
 }
 
@@ -286,7 +261,7 @@ void videoDecoderTest::applyLowLatencyModeIfNeeded()
 
 void videoDecoderTest::setupVideoDecoder()
 {
-    openOrReuseVideoDecoder();
+    openVideoDecoder();
 
     if (mVideoDecoderController.get() == nullptr)
     {
@@ -295,13 +270,16 @@ void videoDecoderTest::setupVideoDecoder()
         return;
     }
 
-    applyTunnelModePropertyIfNeeded();
     buildAndApplyStreamConfig();
     applyDecodeErrorPolicyIfNeeded();
     applyLowLatencyModeIfNeeded();
 
     // Start Decoder
     VIDEODECODER_START_SUCCESS(mDecoderHandle, mVideoDecoderController, true);
+
+    /* rdk-halif-aidl 0.23.0: the operational mode is selected by the vendor and can only be read after start() */
+    mOperationMode = OperationalMode::NON_TUNNELLED;
+    VIDEODECODER_GET_OPERATIONALMODE_SUCCESS(mDecoderHandle, mOperationMode);
 
     UT_LOG_DEBUG("Decoder started");
 }
@@ -310,6 +288,8 @@ void videoDecoderTest::startDecoding()
 {
     int64_t videoBufferHandle = 0;
     mEOSignaledCount= 0; //before start decode reset the count to 0
+    mDecodeQueueFullCount = 0;
+    mControlListener->resetDecodeBufferAvailableCount();
 
     UT_LOG_DEBUG("[PID: %d, TID: %d] startDecoding Start", getpid(), syscall(SYS_gettid));
 
@@ -327,7 +307,7 @@ void videoDecoderTest::startDecoding()
 
         if (videoBufferHandle == 0)
         {
-            UT_LOG_ERROR("Alloc failed for frame %zu, skipping", i);
+            UT_ASSERT_TRUE(false) << "Alloc failed for frame " << i << " (PTS " << framePTS << ")";
             continue;
         }
 
@@ -341,7 +321,7 @@ void videoDecoderTest::startDecoding()
 
             if (!mAVbufferHelper->writeSecureHandle(videoBufferHandle, mInputBuffer.data() + frameOffset, frameSize))
             {
-                UT_LOG_ERROR("Failed to copy frame data to secure buffer");
+                UT_ASSERT_TRUE(false) << "Failed to copy frame data to secure buffer (PTS " << framePTS << ")";
                 AVBUFFER_FREE_SUCCESS(mAVBufferManager, videoBufferHandle);
                 continue;
             }
@@ -359,8 +339,8 @@ void videoDecoderTest::startDecoding()
             }
             else
             {
-                UT_LOG_ERROR("Failed to map buffer or insufficient size (mapBuffer:%p, mapSize:%u, required:%u)",
-                            mapBuffer, mapSize, frameSize);
+                UT_ASSERT_TRUE(false) << "Failed to map buffer or insufficient size (mapSize " << mapSize
+                                      << ", required " << frameSize << ", PTS " << framePTS << ")";
                 if (mapBuffer)
                 {
                     mAVbufferHelper->unmapHandle(videoBufferHandle);
@@ -398,22 +378,8 @@ void videoDecoderTest::startDecoding()
             VIDEODECODER_START_SUCCESS(mDecoderHandle, mVideoDecoderController, true);
         }
 
-        UT_LOG_DEBUG("Adding frame to mInputFrame, PTS:%lld, errorFrame=%d", framePTS, isErrorFrame);
-
-        // Decode Frame
-        InputVideoFrame_t inputVideo;
-        inputVideo.framePTS = framePTS;
-        inputVideo.rms_threshold = mTestConfiguration.rms_diff_threshold;
-        inputVideo.isErrorFrame = isErrorFrame;
-        inputVideo.sendTime = std::chrono::steady_clock::now();
-        {
-            std::lock_guard<std::mutex> lock(mInputFrameMutex);
-            mInputFrame.push_back(std::move(inputVideo));
-        }
-
         videodecoder::InputBufferMetadata metadata = {};
         metadata.nsPresentationTime = framePTS;
-        metadata.discontinuity = false;
         if (mTestConfiguration.metadataOverridePts != -1 && mTestConfiguration.metadataOverridePts == framePTS)
         {
             UT_LOG_INFO("Applying metadata override at PTS:%lld", framePTS);
@@ -425,7 +391,20 @@ void videoDecoderTest::startDecoding()
         }
         const bool isEosControlPoint = (mTestConfiguration.eosPts == framePTS);
 
-        VIDEODECODER_DECODEBUFFER_WITH_METADATA_SUCCESS(mVideoDecoderController, videoBufferHandle, metadata);
+        // Track the frame for PTS and decode-time checks; sendTime is taken right before the decode call
+        UT_LOG_DEBUG("Adding frame to mInputFrame, PTS:%lld, errorFrame=%d", framePTS, isErrorFrame);
+        InputVideoFrame_t inputVideo;
+        inputVideo.framePTS = framePTS;
+        inputVideo.rms_threshold = mTestConfiguration.rms_diff_threshold;
+        inputVideo.isErrorFrame = isErrorFrame;
+        inputVideo.sendTime = std::chrono::steady_clock::now();
+        {
+            std::lock_guard<std::mutex> lock(mInputFrameMutex);
+            mInputFrame.push_back(std::move(inputVideo));
+        }
+
+        // Decode Frame
+        submitFrame(videoBufferHandle, metadata);
 
         const bool isFinalFrame = (i == (mFrameData.size() - 1));
         if (isEosControlPoint || isFinalFrame)
@@ -443,7 +422,7 @@ void videoDecoderTest::startDecoding()
             AVBUFFER_ALLOC_SUCCESS(mAVBufferManager, mVideoPool, frameSize, postEosBufferHandle);
             // Per spec, decodeBufferWithMetadata() must throw EX_ILLEGAL_STATE once called after signalEndOfStream().
             VIDEODECODER_DECODEBUFFER_WITH_METADATA_FAILURE(mVideoDecoderController, framePTS, postEosBufferHandle,
-                                                            false, Status::EX_ILLEGAL_STATE);
+                                                            Status::EX_ILLEGAL_STATE);
             AVBUFFER_FREE_SUCCESS(mAVBufferManager, postEosBufferHandle);
             // Let the drain finish before stop(), which would otherwise discard it along with its onEndOfStream().
             UT_ASSERT_TRUE(mControlListener->waitForEndOfStream(mEOSignaledCount, std::chrono::milliseconds(5000)))
@@ -466,16 +445,71 @@ void videoDecoderTest::startDecoding()
     UT_LOG_DEBUG("[PID: %d, TID: %d] startDecoding End", getpid(), syscall(SYS_gettid));
 }
 
+/* Sends one frame to the decoder. If the input queue is full (decodeBufferWithMetadata() returns false), waits for
+ * onDecodeBufferAvailable() and retries once, the same way as the audio decoder test. A full queue should not happen
+ * in normal running, so run() asserts at the end that it never did. */
+void videoDecoderTest::submitFrame(int64_t bufferHandle, const videodecoder::InputBufferMetadata& metadata)
+{
+    bool accepted = false;
+    const int callbacksBefore = mControlListener->getDecodeBufferAvailableCount();
+
+    UT_LOG_INFO("Calling decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld])",
+                static_cast<uint64_t>(bufferHandle), static_cast<long long>(metadata.nsPresentationTime));
+    Status status = mVideoDecoderController->decodeBufferWithMetadata(bufferHandle, metadata, &accepted);
+    UT_LOG_INFO("Result decodeBufferWithMetadata(pts=%lld) status=[isOK:%s, exception:%s], result=%s",
+                static_cast<long long>(metadata.nsPresentationTime),
+                UT_Control_GetMapString(bool_mapTable, status.isOk()),
+                UT_Control_GetMapString(statusException_mapTable, status.exceptionCode()),
+                accepted ? "true" : "false");
+    UT_ASSERT_TRUE(status.isOk()) << "decodeBufferWithMetadata failed";
+    UT_ASSERT_EQUAL(status.exceptionCode(), Status::EX_NONE);
+    if (!status.isOk() || status.exceptionCode() != Status::EX_NONE)
+    {
+        // Rejected with an exception: the buffer stays with the caller
+        AVBUFFER_FREE_SUCCESS(mAVBufferManager, bufferHandle);
+        return;
+    }
+    if (accepted)
+    {
+        return;
+    }
+
+    mDecodeQueueFullCount++;
+    UT_LOG_WARNING("[DecoderID: %d] decodeBufferWithMetadata returned false at PTS %lld (queue full #%d), "
+                   "waiting for onDecodeBufferAvailable before retry",
+                   mDecoderId.value, static_cast<long long>(metadata.nsPresentationTime), mDecodeQueueFullCount);
+    UT_ASSERT_TRUE(mControlListener->waitForDecodeBufferAvailable(callbacksBefore + 1,
+                                                                  std::chrono::milliseconds(VIDEO_DECODE_BUFFER_AVAILABLE_WAIT_MS)))
+        << "onDecodeBufferAvailable not received after a refused buffer (PTS " << metadata.nsPresentationTime << ")";
+
+    // Retry once; the macro asserts on failure and frees the buffer
+    VIDEODECODER_DECODEBUFFER_WITH_METADATA_SUCCESS(mVideoDecoderController, bufferHandle, metadata);
+}
+
 bool videoDecoderTest::validateFrameLatencyAndBuffer(const DecodedVideoFrame_t& decodedFrame,
                                                       std::set<int64_t>& receivedPts,
                                                       int32_t& totalOnFramesDecoded)
 {
+    // IVideoDecoderControllerListener.onFrameOutput(): frameAVBufferHandle is a valid handle in
+    // non-tunnelled mode and -1 in tunnelled mode (mode selected by the vendor, rdk-halif-aidl 0.23.0).
+    if (mOperationMode == OperationalMode::TUNNELLED)
+    {
+        UT_ASSERT_EQUAL(decodedFrame.frameAVBufferHandle, -1)
+            << "Tunnelled mode: onFrameOutput must return frameAVBufferHandle -1 (PTS " << decodedFrame.framePTS << ")";
+    }
+    else
+    {
+        UT_ASSERT_NOT_EQUAL(decodedFrame.frameAVBufferHandle, -1)
+            << "Non-tunnelled mode: onFrameOutput must return a valid frameAVBufferHandle (PTS " << decodedFrame.framePTS << ")";
+    }
+
     // Free the output buffer first, so a frame rejected below does not leak.
     if(decodedFrame.frameAVBufferHandle != -1)
     {
         //TODO: Need to validate buffer content as well. Currently just checking if buffer handle is valid and freeing it.
         bool isBufferValid = false;
         AVBUFFER_ISVALID_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle, isBufferValid);
+        UT_ASSERT_TRUE(isBufferValid) << "onFrameOutput returned an invalid frameAVBufferHandle (PTS " << decodedFrame.framePTS << ")";
         if (isBufferValid)
         {
             AVBUFFER_FREE_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle);
@@ -623,6 +657,8 @@ void videoDecoderTest::validateFrameMetadata(const DecodedVideoFrame_t& decodedF
     }
 
     // Validate frame rate
+    // TODO: if a decoder outputs a different frame rate than the input (e.g. frame-rate conversion), calculate
+    //       the input and output fps from the PTS deltas and compare them instead of the configured value.
     UT_ASSERT_EQUAL(decodedFrame.metadata->frameRateNumerator, mTestConfiguration.frameRateNumerator)
         << "Frame rate numerator mismatch: expected=" << mTestConfiguration.frameRateNumerator
         << ", actual=" << decodedFrame.metadata->frameRateNumerator
@@ -761,12 +797,9 @@ bool videoDecoderTest::validateDecodedFrame()
         UT_LOG_DEBUG("Retrieved remaining output frame: PTS=%lld, handle=0x%llx, isMetaAvailable=%d",
                 decodedFrame.framePTS, decodedFrame.frameAVBufferHandle, decodedFrame.isMetaAvailable);
 
-        if(decodedFrame.framePTS != -1)
+        if (!validateFrameLatencyAndBuffer(decodedFrame, receivedPts, totalOnFramesDecoded))
         {
-            if (!validateFrameLatencyAndBuffer(decodedFrame, receivedPts, totalOnFramesDecoded))
-            {
-                continue;
-            }
+            continue;
         }
         if (decodedFrame.metadata)
         {
@@ -785,150 +818,6 @@ bool videoDecoderTest::validateDecodedFrame()
     validateFinalMetrics(totalOnFramesDecoded, totalOnErrorsReceived, expectedFrames);
 
     return true;
-}
-
-bool videoDecoderTest::runBackPressureTest()
-{
-    mControlListener->resetQueues();
-    mControlListener->resetDecodeBufferAvailableCount();
-
-    mFrameData.clear();
-    mInputBuffer.clear();
-    if (!makeFrame())
-    {
-        UT_ASSERT_TRUE(false) << "Failed to prepare frame data for back-pressure test";
-        return false;
-    }
-
-    setupVideoDecoder();
-    if (mVideoDecoderController.get() == nullptr)
-    {
-        // open() failed, so only the pool needs to be released.
-        AVBUFFER_DESTROY_POOL_SUCCESS(mAVBufferManager, mVideoPool);
-        return false;
-    }
-
-    bool backPressureObserved = false;
-    bool callbackObserved = false;
-    // Callback count just before the rejected send, so only a new callback counts.
-    int callbackBaseline = 0;
-
-    auto freeIfRejected = [&](int64_t bufferHandle, const Status& decodeStatus, bool decodeAccepted)
-    {
-        if (!decodeAccepted || !decodeStatus.isOk() || decodeStatus.exceptionCode() != Status::EX_NONE)
-        {
-            AVBUFFER_FREE_SUCCESS(mAVBufferManager, bufferHandle);
-        }
-    };
-
-    // Output frames are not freed while feeding, so the decoder stalls and its input queue fills up.
-    auto freeOutputFrames = [&]()
-    {
-        DecodedVideoFrame_t decodedFrame;
-        while (mControlListener->getNextFrame(decodedFrame, std::chrono::milliseconds(0)))
-        {
-            if (decodedFrame.frameAVBufferHandle == -1)
-            {
-                continue;
-            }
-            bool isBufferValid = false;
-            AVBUFFER_ISVALID_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle, isBufferValid);
-            if (isBufferValid)
-            {
-                AVBUFFER_FREE_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle);
-            }
-        }
-    };
-
-    // The stream is short, so send it again in a loop with later PTS values until the decoder is full.
-    static constexpr size_t kMaxProbeSubmissions = 512;
-    int64_t maxPts = 0;
-    for (const auto& frame : mFrameData)
-    {
-        maxPts = std::max(maxPts, std::get<2>(frame));
-    }
-    const int64_t loopPtsStep = maxPts + 1000000000; // 1 second gap between loops
-
-    for (size_t i = 0; i < kMaxProbeSubmissions; ++i)
-    {
-        const auto& [frameOffset, frameSize, streamPTS, isErrorFrame] = mFrameData[i % mFrameData.size()];
-        const int64_t framePTS = streamPTS + static_cast<int64_t>(i / mFrameData.size()) * loopPtsStep;
-
-        int64_t videoBufferHandle = 0;
-        AVBUFFER_ALLOC_SUCCESS(mAVBufferManager, mVideoPool, frameSize, videoBufferHandle);
-
-        void* mapBuffer = nullptr;
-        uint32_t mapSize = 0;
-        mapBuffer = mAVbufferHelper->mapHandle(videoBufferHandle, &mapSize);
-        if (mapBuffer && mapSize >= frameSize)
-        {
-            memcpy(mapBuffer, mInputBuffer.data() + frameOffset, frameSize);
-            mAVbufferHelper->unmapHandle(videoBufferHandle);
-        }
-        else
-        {
-            if (mapBuffer) mAVbufferHelper->unmapHandle(videoBufferHandle);
-            AVBUFFER_FREE_SUCCESS(mAVBufferManager, videoBufferHandle);
-            UT_ASSERT_TRUE(false) << "Failed to map input buffer for back-pressure test";
-            break;
-        }
-
-        videodecoder::InputBufferMetadata metadata = {};
-        metadata.nsPresentationTime = framePTS;
-        metadata.discontinuity = false;
-
-        bool decodeResult = false;
-        callbackBaseline = mControlListener->getDecodeBufferAvailableCount();
-        Status status = mVideoDecoderController->decodeBufferWithMetadata(videoBufferHandle, metadata, &decodeResult);
-        freeIfRejected(videoBufferHandle, status, decodeResult);
-        UT_ASSERT_TRUE(status.isOk()) << "decodeBufferWithMetadata binder call failed while probing back-pressure";
-        UT_ASSERT_EQUAL(status.exceptionCode(), Status::EX_NONE);
-
-        if (!decodeResult)
-        {
-            backPressureObserved = true;
-            break;
-        }
-    }
-
-    if (backPressureObserved)
-    {
-        // Per spec, onDecodeBufferAvailable() is only fired after a refused buffer, so none may arrive
-        // while every earlier buffer was accepted.
-        UT_ASSERT_EQUAL(callbackBaseline, 0) << "onDecodeBufferAvailable fired before any buffer was refused";
-
-        // Release held output frames so the decoder can drain its input queue. Keep draining while
-        // waiting, since newly decoded frames would otherwise refill the output pool and stall it again.
-        const auto callbackDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
-        do
-        {
-            freeOutputFrames();
-            callbackObserved = mControlListener->waitForDecodeBufferAvailable(callbackBaseline + 1, std::chrono::milliseconds(50));
-        } while (!callbackObserved && std::chrono::steady_clock::now() < callbackDeadline);
-        UT_ASSERT_TRUE(callbackObserved) << "onDecodeBufferAvailable was not received after back-pressure";
-
-        if (callbackObserved)
-        {
-            // Per spec, the callback fires exactly once per back-pressure episode. No buffer is sent after
-            // the refusal, so give any extra callback time to arrive, then check only one was delivered.
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            UT_ASSERT_EQUAL(mControlListener->getDecodeBufferAvailableCount(), callbackBaseline + 1)
-                << "onDecodeBufferAvailable fired more than once for one back-pressure episode";
-        }
-    }
-
-    teardownDecoder();
-    freeOutputFrames();
-    closeDecoderSession();
-
-    if (backPressureObserved)
-    {
-        return true;
-    }
-
-    UT_LOG_WARNING("[DecoderID: %d] Back-pressure not observed within %zu submissions; callback semantics not asserted on this decoder",
-                   mDecoderId.value, kMaxProbeSubmissions);
-    return false;
 }
 
 void videoDecoderTest:: teardownDecoder(bool closeDecoderSession)
