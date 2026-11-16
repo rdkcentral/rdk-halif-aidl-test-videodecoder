@@ -322,6 +322,9 @@ struct videoDecoderTestConfiguration_t {
     // When != -1, open() is replaced by openWithResolution(codec, secure, listener, openWithResolutionWidth, openWithResolutionHeight)
     int32_t openWithResolutionWidth;  // -1 = use open(), >0 = use openWithResolution()
     int32_t openWithResolutionHeight; // -1 = use open(), >0 = use openWithResolution()
+    // stream_config_metadata: 0 = colorimetry / MDI / CLL are not passed to setStreamConfig() (NOSET case); they are
+    // still the expected output, which the decoder must then report from the bitstream on its own
+    bool streamConfigMetadata;
 
     // Sink control fields
     bool    sink_backpressure;

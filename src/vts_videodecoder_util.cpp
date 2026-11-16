@@ -1219,6 +1219,7 @@ UT_status_t vts_videodecoder_parse_testconfig(void* pTestInstance, const char *m
         string decodeTime = streamList + "." + to_string(i) + ".decode_time_threshold";
         string decoderDelay = controlList + ".delay_between_decode_calls";
         string openWithResolutionWidth  = prefix + "openWithResolutionWidth";
+        string streamConfigMetadata = prefix + "stream_config_metadata";
         string openWithResolutionHeight = prefix + "openWithResolutionHeight";
         string stopPts = prefix + "stop_start_pts";
         string discontinuityPts = prefix + "signal_discontinuity_pts";
@@ -1271,6 +1272,9 @@ UT_status_t vts_videodecoder_parse_testconfig(void* pTestInstance, const char *m
             ? ut_kvp_getInt32Field(kvpTestInstance, openWithResolutionWidth.c_str()) : -1;
         testDetails.openWithResolutionHeight = ut_kvp_fieldPresent(kvpTestInstance, openWithResolutionHeight.c_str())
             ? ut_kvp_getInt32Field(kvpTestInstance, openWithResolutionHeight.c_str()) : -1;
+        // Optional, default 1: pass colorimetry / MDI / CLL from the config to setStreamConfig()
+        testDetails.streamConfigMetadata = !ut_kvp_fieldPresent(kvpTestInstance, streamConfigMetadata.c_str()) ||
+            (ut_kvp_getInt32Field(kvpTestInstance, streamConfigMetadata.c_str()) != 0);
 
         // Frame rate
         testDetails.frameRateNumerator = ut_kvp_getUInt32Field(kvpTestInstance, frameRateNumerator.c_str());

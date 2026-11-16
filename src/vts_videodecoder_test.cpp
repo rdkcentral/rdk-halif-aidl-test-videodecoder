@@ -210,15 +210,15 @@ void videoDecoderTest::buildAndApplyStreamConfig()
         streamConfig.frameRate = fr;
     }
     Colorimetry unknownColorimetry{};
-    if (mTestConfiguration.colorimetry != unknownColorimetry)
+    if (mTestConfiguration.streamConfigMetadata && mTestConfiguration.colorimetry != unknownColorimetry)
     {
         streamConfig.colorimetry = mTestConfiguration.colorimetry;
     }
-    if (mTestConfiguration.masteringDisplayInfo.has_value())
+    if (mTestConfiguration.streamConfigMetadata && mTestConfiguration.masteringDisplayInfo.has_value())
     {
         streamConfig.masteringDisplayInfo = mTestConfiguration.masteringDisplayInfo;
     }
-    if (mTestConfiguration.contentLightLevel.has_value())
+    if (mTestConfiguration.streamConfigMetadata && mTestConfiguration.contentLightLevel.has_value())
     {
         streamConfig.contentLightLevel = mTestConfiguration.contentLightLevel;
     }
