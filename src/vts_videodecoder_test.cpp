@@ -55,6 +55,9 @@ using namespace std;
 
 /* Max wait for onDecodeBufferAvailable() after decodeBufferWithMetadata() returns false (input queue full) */
 static constexpr int VIDEO_DECODE_BUFFER_AVAILABLE_WAIT_MS = 5000;
+/* Wait for a decoded frame, and the number of consecutive misses allowed before giving up (same as audiodecoder) */
+static constexpr int VIDEO_FRAME_WAIT_MS = 500;
+static constexpr int VIDEO_FRAME_MAX_RETRY_COUNT = 10;
 
 // AVBufferSpaceListener implementation
 Status AVBufferSpaceListener::onSpaceAvailable()
@@ -288,6 +291,7 @@ void videoDecoderTest::startDecoding()
 {
     int64_t videoBufferHandle = 0;
     mEOSignaledCount= 0; //before start decode reset the count to 0
+    mFeedDone = false;
     mDecodeQueueFullCount = 0;
     mControlListener->resetDecodeBufferAvailableCount();
 
@@ -442,6 +446,7 @@ void videoDecoderTest::startDecoding()
         // EOS is sent via signalEndOfStream().
     }
 
+    mFeedDone = true;
     UT_LOG_DEBUG("[PID: %d, TID: %d] startDecoding End", getpid(), syscall(SYS_gettid));
 }
 
@@ -792,8 +797,31 @@ bool videoDecoderTest::validateDecodedFrame()
     int32_t discontinuityFramesReceived = 0;
 
 
-    while (mControlListener->getNextFrame(decodedFrame, std::chrono::milliseconds(5000)))
+    int32_t retryCount = 0;
+    while (true)
     {
+        if (!mControlListener->getNextFrame(decodedFrame, std::chrono::milliseconds(VIDEO_FRAME_WAIT_MS)))
+        {
+            /* No frame within the wait time: done once feeding finished and every signalled EOS came back,
+             * otherwise retry; missing frames or EOS are reported by the final checks below */
+            if (mFeedDone && mControlListener->waitForEndOfStream(mEOSignaledCount, std::chrono::milliseconds(0)))
+            {
+                break;
+            }
+            if (++retryCount < VIDEO_FRAME_MAX_RETRY_COUNT)
+            {
+                UT_LOG_WARNING("[DecoderID: %d] decoded frame not received within %d ms (retry %d)",
+                               mDecoderId.value, VIDEO_FRAME_WAIT_MS, retryCount);
+                continue;
+            }
+            UT_LOG_ERROR("[DecoderID: %d] Max retry count reached: neither a decoded frame nor decoder EOS received",
+                         mDecoderId.value);
+            break;
+        }
+
+        /* Reset retry count for the next frame */
+        retryCount = 0;
+
         UT_LOG_DEBUG("Retrieved remaining output frame: PTS=%lld, handle=0x%llx, isMetaAvailable=%d",
                 decodedFrame.framePTS, decodedFrame.frameAVBufferHandle, decodedFrame.isMetaAvailable);
 
@@ -817,7 +845,33 @@ bool videoDecoderTest::validateDecodedFrame()
     int32_t totalOnErrorsReceived = mEventListener->getErrorCount();
     validateFinalMetrics(totalOnFramesDecoded, totalOnErrorsReceived, expectedFrames);
 
+    /* cleanup if any frames are received after the final checks (same as the audio decoder test) */
+    cleanupVideoDecoder();
+
     return true;
+}
+
+/* Frees decoded frames still queued after validation (same as the audio decoder test cleanupAudioDecoder()).
+ * Every frame is output before onEndOfStream(), so no frame is expected here. */
+void videoDecoderTest::cleanupVideoDecoder()
+{
+    DecodedVideoFrame_t decodedFrame;
+    while (mControlListener->getNextFrame(decodedFrame, std::chrono::milliseconds(0)))
+    {
+        if (decodedFrame.frameAVBufferHandle != -1)
+        {
+            UT_LOG_ERROR("[DecoderID: %d] Frame (PTS %lld) received after end of stream",
+                         mDecoderId.value, static_cast<long long>(decodedFrame.framePTS));
+            UT_ASSERT_TRUE(false);
+
+            bool isBufferValid = false;
+            AVBUFFER_ISVALID_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle, isBufferValid);
+            if (isBufferValid)
+            {
+                AVBUFFER_FREE_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle);
+            }
+        }
+    }
 }
 
 void videoDecoderTest:: teardownDecoder(bool closeDecoderSession)

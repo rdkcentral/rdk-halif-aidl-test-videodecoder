@@ -1743,7 +1743,8 @@ public:
 // DecoderTest declaration
 class videoDecoderTest {
 public:
-    int32_t mEOSignaledCount = 0;
+    std::atomic<int32_t> mEOSignaledCount{0};   // written by the feed thread, read by the validate thread
+    std::atomic<bool> mFeedDone{false};          // startDecoding() has sent every input buffer
     videoDecoderTest(IVideoDecoder::Id decoderId, sp<IVideoDecoder> decoderHandle,
                 sp<VideoDecoderControllerListener> controlListener,
                 sp<VideoDecoderEventListener> eventListener,
@@ -1806,6 +1807,7 @@ private:
     void startDecoding();
     void submitFrame(int64_t bufferHandle, const videodecoder::InputBufferMetadata& metadata);
     bool validateDecodedFrame();
+    void cleanupVideoDecoder();
     // Helpers for validateDecodedFrame(), one per validation concern:
     bool validateFrameLatencyAndBuffer(const DecodedVideoFrame_t& decodedFrame, std::set<int64_t>& receivedPts,
                                         int32_t& totalOnFramesDecoded);
