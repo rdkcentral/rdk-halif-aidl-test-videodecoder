@@ -29,6 +29,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: UNSPECIFIED
+      primaries: UNSPECIFIED
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -1221,7 +1226,7 @@ VideoStreams:
     frameRateDenominator: 1
     endOfStream: 0
     stop_start_pts: -1 #`pts` value in nano seconds at which the decoder should be stopped and restarted during the test. -1 indicates that decoder should not be restarted
-    signal_discontinuity_pts: 133333000 #`pts` value in nano seconds at which the test should signal discontinuity to the decoder. -1 indicates that no discontinuity signal should be sent
+    signal_discontinuity_pts: 183333000 #`pts` value in nano seconds at which the test should signal discontinuity to the decoder. -1 indicates that no discontinuity signal should be sent
     flush_pts: -1 #`pts` value in nano seconds that determine when the test should flush the decoder. -1 indicates that test should not flush
     flush_reset_pts: -1 #`pts` value in nano seconds that determine when the test should flush with reset the decoder. -1 indicates that test should not flush
     eos_pts: -1 #`pts` value in nano seconds that determine when the test should sent `eos` signal to decoder. -1 indicates that test should not signal `eos`
@@ -1649,6 +1654,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: BT709
+      primaries: BT709
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -1929,6 +1939,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: BT709
+      primaries: BT709
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -2209,6 +2224,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: BT709
+      primaries: BT709
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -2491,6 +2511,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: BT709
+      primaries: BT709
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -2773,6 +2798,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: BT709
+      primaries: BT709
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1

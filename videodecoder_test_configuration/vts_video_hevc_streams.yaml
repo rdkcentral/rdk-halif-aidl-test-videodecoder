@@ -29,6 +29,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: UNSPECIFIED
+      primaries: UNSPECIFIED
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 30 #Frame Rate
     frameRateDenominator: 1
@@ -3126,6 +3131,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: BT709
+      primaries: BT709
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -3408,6 +3418,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: BT709
+      primaries: BT709
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -3690,6 +3705,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: BT709
+      primaries: BT709
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -3974,6 +3994,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: BT709
+      primaries: BT709
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -4258,6 +4283,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: BT709
+      primaries: BT709
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
