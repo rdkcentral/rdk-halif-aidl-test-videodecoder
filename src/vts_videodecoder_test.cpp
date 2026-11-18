@@ -53,11 +53,8 @@
 using namespace std::chrono;
 using namespace std;
 
-/* Max wait for onDecodeBufferAvailable() after decodeBufferWithMetadata() returns false (input queue full) */
-static constexpr int VIDEO_DECODE_BUFFER_AVAILABLE_WAIT_MS = 5000;
-/* Wait for a decoded frame, and the number of consecutive misses allowed before giving up (same as audiodecoder) */
-static constexpr int VIDEO_FRAME_WAIT_MS = 500;
-static constexpr int VIDEO_FRAME_MAX_RETRY_COUNT = 10;
+#define MAX_FRAME_WAIT_TIME 500  /* ms — timeout for decoded frame output and for onDecodeBufferAvailable() (same as audiodecoder) */
+#define MAX_RETRY_COUNT 5        /* Maximum number of retries for waiting frames */
 
 // AVBufferSpaceListener implementation
 Status AVBufferSpaceListener::onSpaceAvailable()
@@ -484,7 +481,7 @@ void videoDecoderTest::submitFrame(int64_t bufferHandle, const videodecoder::Inp
                    "waiting for onDecodeBufferAvailable before retry",
                    mDecoderId.value, static_cast<long long>(metadata.nsPresentationTime), mDecodeQueueFullCount);
     UT_ASSERT_TRUE(mControlListener->waitForDecodeBufferAvailable(callbacksBefore + 1,
-                                                                  std::chrono::milliseconds(VIDEO_DECODE_BUFFER_AVAILABLE_WAIT_MS)))
+                                                                  std::chrono::milliseconds(MAX_FRAME_WAIT_TIME)))
         << "onDecodeBufferAvailable not received after a refused buffer (PTS " << metadata.nsPresentationTime << ")";
 
     // Retry once; the macro asserts on failure and frees the buffer
@@ -800,23 +797,35 @@ bool videoDecoderTest::validateDecodedFrame()
     int32_t retryCount = 0;
     while (true)
     {
-        if (!mControlListener->getNextFrame(decodedFrame, std::chrono::milliseconds(VIDEO_FRAME_WAIT_MS)))
+        if (!mControlListener->getNextFrame(decodedFrame, std::chrono::milliseconds(MAX_FRAME_WAIT_TIME)))
         {
-            /* No frame within the wait time: done once feeding finished and every signalled EOS came back,
-             * otherwise retry; missing frames or EOS are reported by the final checks below */
+            /* If frame not received within the wait time, check if EOS has been reached
+             * (feeding finished and every signalled EOS came back) */
             if (mFeedDone && mControlListener->waitForEndOfStream(mEOSignaledCount, std::chrono::milliseconds(0)))
             {
+                /* EOS has been reached, no more frames expected */
                 break;
             }
-            if (++retryCount < VIDEO_FRAME_MAX_RETRY_COUNT)
+
+            /* EOS has not been reached, continue waiting for frames */
+            retryCount++;
+            UT_LOG_ERROR("[DecoderID: %d] decoded frame not received within %d ms", mDecoderId.value, MAX_FRAME_WAIT_TIME);
+
+            /* Report failure only after the first frame (the first output includes the decoder start-up latency) */
+            if (totalOnFramesDecoded > 0)
             {
-                UT_LOG_WARNING("[DecoderID: %d] decoded frame not received within %d ms (retry %d)",
-                               mDecoderId.value, VIDEO_FRAME_WAIT_MS, retryCount);
+                UT_ASSERT_TRUE(false);
+            }
+
+            if (retryCount < MAX_RETRY_COUNT)
+            {
                 continue;
             }
-            UT_LOG_ERROR("[DecoderID: %d] Max retry count reached: neither a decoded frame nor decoder EOS received",
-                         mDecoderId.value);
-            break;
+            else
+            {
+                UT_LOG_ERROR("[DecoderID: %d] Max retry count reached, exiting", mDecoderId.value);
+                break;
+            }
         }
 
         /* Reset retry count for the next frame */
