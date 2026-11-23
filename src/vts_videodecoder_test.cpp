@@ -54,9 +54,6 @@ using namespace std::chrono;
 using namespace std;
 
 #define MAX_FRAME_WAIT_TIME 500  /* ms — timeout for decoded frame output and for onDecodeBufferAvailable() (same as audiodecoder) */
-/* Upper bound for the planned output gap (see mFeedPaused): 12 x MAX_FRAME_WAIT_TIME = 6 s covers the 5 s
- * mid-stream EOS drain plus stop()/start(), so a decoder that really stops outputting still fails the test */
-#define MAX_FEED_PAUSE_WAIT_COUNT 12
 #define MAX_RETRY_COUNT 5        /* Maximum number of retries for waiting frames */
 
 // AVBufferSpaceListener implementation
@@ -292,8 +289,6 @@ void videoDecoderTest::startDecoding()
     int64_t videoBufferHandle = 0;
     mEOSignaledCount= 0; //before start decode reset the count to 0
     mFeedDone = false;
-    mFeedPaused = false;
-    mRestartPending = false;
     mDecodeQueueFullCount = 0;
     mControlListener->resetDecodeBufferAvailableCount();
 
@@ -360,12 +355,8 @@ void videoDecoderTest::startDecoding()
         if (mTestConfiguration.stopPts == framePTS)
         {
             UT_LOG_INFO("Stopping decoder at PTS:%lld", framePTS);
-            /* Planned output gap: no output during stop()/start() and until the decoder has the next keyframe
-             * (plus reordered frames) again; the consumer ends the gap on the first frame after the restart */
-            mFeedPaused = true;
             VIDEODECODER_STOP_SUCCESS(mDecoderHandle, mVideoDecoderController, true);
             VIDEODECODER_START_SUCCESS(mDecoderHandle, mVideoDecoderController, true);
-            mRestartPending = true;
         }
         if (mTestConfiguration.discontinuityPts == framePTS)
         {
@@ -435,9 +426,6 @@ void videoDecoderTest::startDecoding()
                                                             Status::EX_ILLEGAL_STATE);
             AVBUFFER_FREE_SUCCESS(mAVBufferManager, postEosBufferHandle);
             // Let the drain finish before stop(), which would otherwise discard it along with its onEndOfStream().
-            /* Planned output gap: after onEndOfStream() no output is expected until the decoder is restarted and
-             * has the next keyframe (plus reordered frames) again; the consumer ends the gap on that first frame */
-            mFeedPaused = true;
             UT_ASSERT_TRUE(mControlListener->waitForEndOfStream(mEOSignaledCount, std::chrono::milliseconds(5000)))
                 << "onEndOfStream not received for EOS at PTS " << framePTS;
             // Restart only for a mid-stream EOS: the decoder resumes on the next keyframe and the
@@ -447,12 +435,6 @@ void videoDecoderTest::startDecoding()
             {
                 VIDEODECODER_STOP_SUCCESS(mDecoderHandle, mVideoDecoderController, true);
                 VIDEODECODER_START_SUCCESS(mDecoderHandle, mVideoDecoderController, true);
-                mRestartPending = true;
-            }
-            else
-            {
-                /* Final EOS: no restart, so no more frames are expected and the gap ends here */
-                mFeedPaused = false;
             }
         }
 
@@ -813,7 +795,7 @@ bool videoDecoderTest::validateDecodedFrame()
 
 
     int32_t retryCount = 0;
-    int32_t feedPauseWaitCount = 0;
+    int lastFrameEndOfStreamCount = 0;  /* onEndOfStream() count of the last decoded frame */
     while (true)
     {
         if (!mControlListener->getNextFrame(decodedFrame, std::chrono::milliseconds(MAX_FRAME_WAIT_TIME)))
@@ -826,20 +808,15 @@ bool videoDecoderTest::validateDecodedFrame()
                 break;
             }
 
-            /* Planned output gap (mid-stream EOS / stop()-start() restart, see mFeedPaused): no output is expected,
-             * so keep waiting without reporting a missing frame (bounded by MAX_FEED_PAUSE_WAIT_COUNT) */
-            if (mFeedPaused && feedPauseWaitCount < MAX_FEED_PAUSE_WAIT_COUNT)
-            {
-                feedPauseWaitCount++;
-                continue;
-            }
-
             /* EOS has not been reached, continue waiting for frames */
             retryCount++;
             UT_LOG_ERROR("[DecoderID: %d] decoded frame not received within %d ms", mDecoderId.value, MAX_FRAME_WAIT_TIME);
 
-            /* Report failure only after the first frame (the first output includes the decoder start-up latency) */
-            if (totalOnFramesDecoded > 0)
+            /* Report failure only after the first frame of the session and of each mid-stream EOS restart: the first
+             * output after start() includes the decoder start-up latency. An onEndOfStream() received since the last
+             * frame means the decoder is in the EOS -> stop() -> start() restart and has not output its first frame yet. */
+            const bool afterRestart = mControlListener->getEndOfStreamCount(false) > lastFrameEndOfStreamCount;
+            if (totalOnFramesDecoded > 0 && !afterRestart)
             {
                 UT_ASSERT_TRUE(false);
             }
@@ -855,16 +832,9 @@ bool videoDecoderTest::validateDecodedFrame()
             }
         }
 
-        /* Reset retry counts for the next frame */
+        /* Reset retry count for the next frame */
         retryCount = 0;
-        feedPauseWaitCount = 0;
-
-        /* First decoded frame after a restart: the planned output gap is over */
-        if (mRestartPending)
-        {
-            mRestartPending = false;
-            mFeedPaused = false;
-        }
+        lastFrameEndOfStreamCount = decodedFrame.endOfStreamCount;
 
         UT_LOG_DEBUG("Retrieved remaining output frame: PTS=%lld, handle=0x%llx, isMetaAvailable=%d",
                 decodedFrame.framePTS, decodedFrame.frameAVBufferHandle, decodedFrame.isMetaAvailable);

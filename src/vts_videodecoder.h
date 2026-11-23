@@ -258,6 +258,7 @@ struct DecodedVideoFrame_t {
     std::unique_ptr<com::rdk::hal::videodecoder::FrameMetadata> metadata;
     bool validationStatus; // Added for validation result
     int64_t frameAVBufferHandle; // Added for output buffer handle
+    int endOfStreamCount = 0;    // onEndOfStream() count when the frame was output (marks frames after a mid-stream EOS)
 };
 
 // One in-band resolution/bitrate ladder breakpoint: expected width/height/bitRate
@@ -1536,6 +1537,8 @@ public:
             // A null metadata callback is only valid for routine (non-EOS) frames.
         }
 
+        /* Every frame of a stream is output before its onEndOfStream(), so frames after a mid-stream EOS carry a higher count */
+        frame.endOfStreamCount = getEndOfStreamCount(false);
         {
             std::lock_guard<std::mutex> lock(mMutex);
             mDecodedFrames.push_back(std::move(frame)); // Move is now possible
@@ -1748,14 +1751,6 @@ class videoDecoderTest {
 public:
     std::atomic<int32_t> mEOSignaledCount{0};   // written by the feed thread, read by the validate thread
     std::atomic<bool> mFeedDone{false};          // startDecoding() has sent every input buffer
-    /* Planned output gap (mid-stream EOS drain, stop()/start() and the first frame after the restart).
-     * The consumer waits MAX_FRAME_WAIT_TIME per frame and reports every miss as a pipeline delay, but during
-     * this gap no decoded frame is expected, so its timeouts must not be reported as failures.
-     * mFeedPaused     - set by startDecoding() for the whole planned gap
-     * mRestartPending - set by startDecoding() after start(); the consumer clears both flags on the first
-     *                   decoded frame after the restart (frames drained before the EOS do not clear them) */
-    std::atomic<bool> mFeedPaused{false};
-    std::atomic<bool> mRestartPending{false};
     videoDecoderTest(IVideoDecoder::Id decoderId, sp<IVideoDecoder> decoderHandle,
                 sp<VideoDecoderControllerListener> controlListener,
                 sp<VideoDecoderEventListener> eventListener,
