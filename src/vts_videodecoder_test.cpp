@@ -54,6 +54,9 @@ using namespace std::chrono;
 using namespace std;
 
 #define MAX_FRAME_WAIT_TIME 500  /* ms — timeout for decoded frame output and for onDecodeBufferAvailable() (same as audiodecoder) */
+/* Upper bound for the planned output gap (see mFeedPaused): 12 x MAX_FRAME_WAIT_TIME = 6 s covers the 5 s
+ * mid-stream EOS drain plus stop()/start(), so a decoder that really stops outputting still fails the test */
+#define MAX_FEED_PAUSE_WAIT_COUNT 12
 #define MAX_RETRY_COUNT 5        /* Maximum number of retries for waiting frames */
 
 // AVBufferSpaceListener implementation
@@ -289,6 +292,8 @@ void videoDecoderTest::startDecoding()
     int64_t videoBufferHandle = 0;
     mEOSignaledCount= 0; //before start decode reset the count to 0
     mFeedDone = false;
+    mFeedPaused = false;
+    mRestartPending = false;
     mDecodeQueueFullCount = 0;
     mControlListener->resetDecodeBufferAvailableCount();
 
@@ -355,8 +360,12 @@ void videoDecoderTest::startDecoding()
         if (mTestConfiguration.stopPts == framePTS)
         {
             UT_LOG_INFO("Stopping decoder at PTS:%lld", framePTS);
+            /* Planned output gap: no output during stop()/start() and until the decoder has the next keyframe
+             * (plus reordered frames) again; the consumer ends the gap on the first frame after the restart */
+            mFeedPaused = true;
             VIDEODECODER_STOP_SUCCESS(mDecoderHandle, mVideoDecoderController, true);
             VIDEODECODER_START_SUCCESS(mDecoderHandle, mVideoDecoderController, true);
+            mRestartPending = true;
         }
         if (mTestConfiguration.discontinuityPts == framePTS)
         {
@@ -426,6 +435,9 @@ void videoDecoderTest::startDecoding()
                                                             Status::EX_ILLEGAL_STATE);
             AVBUFFER_FREE_SUCCESS(mAVBufferManager, postEosBufferHandle);
             // Let the drain finish before stop(), which would otherwise discard it along with its onEndOfStream().
+            /* Planned output gap: after onEndOfStream() no output is expected until the decoder is restarted and
+             * has the next keyframe (plus reordered frames) again; the consumer ends the gap on that first frame */
+            mFeedPaused = true;
             UT_ASSERT_TRUE(mControlListener->waitForEndOfStream(mEOSignaledCount, std::chrono::milliseconds(5000)))
                 << "onEndOfStream not received for EOS at PTS " << framePTS;
             // Restart only for a mid-stream EOS: the decoder resumes on the next keyframe and the
@@ -435,6 +447,12 @@ void videoDecoderTest::startDecoding()
             {
                 VIDEODECODER_STOP_SUCCESS(mDecoderHandle, mVideoDecoderController, true);
                 VIDEODECODER_START_SUCCESS(mDecoderHandle, mVideoDecoderController, true);
+                mRestartPending = true;
+            }
+            else
+            {
+                /* Final EOS: no restart, so no more frames are expected and the gap ends here */
+                mFeedPaused = false;
             }
         }
 
@@ -795,6 +813,7 @@ bool videoDecoderTest::validateDecodedFrame()
 
 
     int32_t retryCount = 0;
+    int32_t feedPauseWaitCount = 0;
     while (true)
     {
         if (!mControlListener->getNextFrame(decodedFrame, std::chrono::milliseconds(MAX_FRAME_WAIT_TIME)))
@@ -805,6 +824,14 @@ bool videoDecoderTest::validateDecodedFrame()
             {
                 /* EOS has been reached, no more frames expected */
                 break;
+            }
+
+            /* Planned output gap (mid-stream EOS / stop()-start() restart, see mFeedPaused): no output is expected,
+             * so keep waiting without reporting a missing frame (bounded by MAX_FEED_PAUSE_WAIT_COUNT) */
+            if (mFeedPaused && feedPauseWaitCount < MAX_FEED_PAUSE_WAIT_COUNT)
+            {
+                feedPauseWaitCount++;
+                continue;
             }
 
             /* EOS has not been reached, continue waiting for frames */
@@ -828,8 +855,16 @@ bool videoDecoderTest::validateDecodedFrame()
             }
         }
 
-        /* Reset retry count for the next frame */
+        /* Reset retry counts for the next frame */
         retryCount = 0;
+        feedPauseWaitCount = 0;
+
+        /* First decoded frame after a restart: the planned output gap is over */
+        if (mRestartPending)
+        {
+            mRestartPending = false;
+            mFeedPaused = false;
+        }
 
         UT_LOG_DEBUG("Retrieved remaining output frame: PTS=%lld, handle=0x%llx, isMetaAvailable=%d",
                 decodedFrame.framePTS, decodedFrame.frameAVBufferHandle, decodedFrame.isMetaAvailable);
@@ -883,6 +918,29 @@ void videoDecoderTest::cleanupVideoDecoder()
     }
 }
 
+/* Frees decoded frames left in the queue because nobody consumed them (e.g. the sink stopped early after a
+ * failure). Output frames are owned by the client, and destroyPool() fails while any allocation is outstanding
+ * (IAVBuffer.destroyPool), which would add a misleading failure. Unlike cleanupVideoDecoder(), no assert here:
+ * leftover frames are expected after an earlier failure, which is already reported. */
+void videoDecoderTest::freeUnconsumedFrames()
+{
+    DecodedVideoFrame_t decodedFrame;
+    int32_t freedFrameCount = 0;
+    while (mControlListener->getNextFrame(decodedFrame, std::chrono::milliseconds(0)))
+    {
+        if (decodedFrame.frameAVBufferHandle != -1)
+        {
+            AVBUFFER_FREE_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle);
+            freedFrameCount++;
+        }
+    }
+    if (freedFrameCount > 0)
+    {
+        UT_LOG_WARNING("[DecoderID: %d] Freed %d decoded frame(s) that were not consumed",
+                       mDecoderId.value, freedFrameCount);
+    }
+}
+
 void videoDecoderTest:: teardownDecoder(bool closeDecoderSession)
 {
     releaseDecoderSession(closeDecoderSession);
@@ -911,6 +969,9 @@ void videoDecoderTest::releaseDecoderSession(bool closeController)
     {
         UT_LOG_WARNING("Skipping stop during releaseDecoderSession: failed to query decoder state");
     }
+
+    /* The decoder is stopped, so no new frame can arrive: free what nobody consumed before destroyPool() */
+    freeUnconsumedFrames();
 
     if (closeController)
     {

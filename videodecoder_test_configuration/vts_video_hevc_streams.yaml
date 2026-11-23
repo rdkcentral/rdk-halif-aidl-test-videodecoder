@@ -1896,7 +1896,7 @@ VideoStreams:
     codec: H265_HEVC  #Video codec information, Refer `Codec` enum
     codedWidth: 3840
     codedHeight: 2160
-    colorDepth: 8
+    colorDepth: 10
     pixelFormat: YCBCR420
     dynamic_range: HDR10 #com.rdk.hal.video.decoder.DynamicRange enum.
     scanType: PROGRESSIVE_FRAME
@@ -2521,7 +2521,7 @@ VideoStreams:
       - 9753
       - 889
     PTS: #List of Presentation Time Stamps (per frame) in nanoseconds
-      - 00000000
+      - 0
       - 50000000
       - 33333333
       - 16666666
