@@ -80,8 +80,6 @@ void videoDecoderTest::run()
     if (mVideoDecoderController.get() == nullptr)
     {
         UT_ASSERT_TRUE(false) << "Decoder session is not available";
-        // open() failed, so only the pool needs to be released
-        AVBUFFER_DESTROY_POOL_SUCCESS(mAVBufferManager, mVideoPool);
         return;
     }
 
@@ -156,9 +154,6 @@ void videoDecoderTest::openVideoDecoder()
 {
     mBufferListener = new AVBufferSpaceListener();
 
-    // Create Video Pool
-    AVBUFFER_CREATE_VIDEOPOOL_SUCCESS(mAVBufferManager, mSecureDecode, mDecoderId, mBufferListener, mVideoPool);
-
     // Open Decoder — use openWithResolution() when hint dimensions are set in the test config
     if (mTestConfiguration.openWithResolutionWidth != -1 && mTestConfiguration.openWithResolutionHeight != -1)
     {
@@ -174,6 +169,9 @@ void videoDecoderTest::openVideoDecoder()
         VIDEODECODER_OPEN_SUCCESS(mDecoderHandle, mTestConfiguration.codec, mSecureDecode,
                                   mControlListener, mVideoDecoderController, true);
     }
+
+    // Pools (secure ones in particular) can only be created once the decoder is open (AVBuffer spec)
+    AVBUFFER_CREATE_VIDEOPOOL_SUCCESS(mAVBufferManager, mSecureDecode, mDecoderId, mBufferListener, mVideoPool);
 }
 
 void videoDecoderTest::buildAndApplyStreamConfig()
@@ -453,26 +451,18 @@ void videoDecoderTest::startDecoding()
 void videoDecoderTest::submitFrame(int64_t bufferHandle, const videodecoder::InputBufferMetadata& metadata)
 {
     bool accepted = false;
+    Status status;
     const int callbacksBefore = mControlListener->getDecodeBufferAvailableCount();
 
-    UT_LOG_INFO("Calling decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld])",
-                static_cast<uint64_t>(bufferHandle), static_cast<long long>(metadata.nsPresentationTime));
-    Status status = mVideoDecoderController->decodeBufferWithMetadata(bufferHandle, metadata, &accepted);
-    UT_LOG_INFO("Result decodeBufferWithMetadata(pts=%lld) status=[isOK:%s, exception:%s], result=%s",
-                static_cast<long long>(metadata.nsPresentationTime),
-                UT_Control_GetMapString(bool_mapTable, status.isOk()),
-                UT_Control_GetMapString(statusException_mapTable, status.exceptionCode()),
-                accepted ? "true" : "false");
-    UT_ASSERT_TRUE(status.isOk()) << "decodeBufferWithMetadata failed";
-    UT_ASSERT_EQUAL(status.exceptionCode(), Status::EX_NONE);
+    VIDEODECODER_DECODEBUFFER_WITH_METADATA_SUCCESS(mVideoDecoderController, bufferHandle, metadata, accepted, status);
+    if (accepted)
+    {
+        return;
+    }
     if (!status.isOk() || status.exceptionCode() != Status::EX_NONE)
     {
         // Rejected with an exception: the buffer stays with the caller
         AVBUFFER_FREE_SUCCESS(mAVBufferManager, bufferHandle);
-        return;
-    }
-    if (accepted)
-    {
         return;
     }
 
@@ -484,8 +474,13 @@ void videoDecoderTest::submitFrame(int64_t bufferHandle, const videodecoder::Inp
                                                                   std::chrono::milliseconds(MAX_FRAME_WAIT_TIME)))
         << "onDecodeBufferAvailable not received after a refused buffer (PTS " << metadata.nsPresentationTime << ")";
 
-    // Retry once; the macro asserts on failure and frees the buffer
-    VIDEODECODER_DECODEBUFFER_WITH_METADATA_SUCCESS(mVideoDecoderController, bufferHandle, metadata);
+    // Retry once; if it is refused again or fails, the buffer is still ours to free
+    VIDEODECODER_DECODEBUFFER_WITH_METADATA_SUCCESS(mVideoDecoderController, bufferHandle, metadata, accepted, status);
+    UT_ASSERT_TRUE(accepted) << "decodeBufferWithMetadata refused the retry (PTS " << metadata.nsPresentationTime << ")";
+    if (!accepted)
+    {
+        AVBUFFER_FREE_SUCCESS(mAVBufferManager, bufferHandle);
+    }
 }
 
 bool videoDecoderTest::validateFrameLatencyAndBuffer(const DecodedVideoFrame_t& decodedFrame,
@@ -860,39 +855,18 @@ bool videoDecoderTest::validateDecodedFrame()
     validateFinalMetrics(totalOnFramesDecoded, totalOnErrorsReceived, expectedFrames);
 
     /* cleanup if any frames are received after the final checks (same as the audio decoder test) */
-    cleanupVideoDecoder();
+    cleanupVideoDecoder(true);
 
     return true;
 }
 
-/* Frees decoded frames still queued after validation (same as the audio decoder test cleanupAudioDecoder()).
- * Every frame is output before onEndOfStream(), so no frame is expected here. */
-void videoDecoderTest::cleanupVideoDecoder()
-{
-    DecodedVideoFrame_t decodedFrame;
-    while (mControlListener->getNextFrame(decodedFrame, std::chrono::milliseconds(0)))
-    {
-        if (decodedFrame.frameAVBufferHandle != -1)
-        {
-            UT_LOG_ERROR("[DecoderID: %d] Frame (PTS %lld) received after end of stream",
-                         mDecoderId.value, static_cast<long long>(decodedFrame.framePTS));
-            UT_ASSERT_TRUE(false);
-
-            bool isBufferValid = false;
-            AVBUFFER_ISVALID_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle, isBufferValid);
-            if (isBufferValid)
-            {
-                AVBUFFER_FREE_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle);
-            }
-        }
-    }
-}
-
-/* Frees decoded frames left in the queue because nobody consumed them (e.g. the sink stopped early after a
- * failure). Output frames are owned by the client, and destroyPool() fails while any allocation is outstanding
- * (IAVBuffer.destroyPool), which would add a misleading failure. Unlike cleanupVideoDecoder(), no assert here:
- * leftover frames are expected after an earlier failure, which is already reported. */
-void videoDecoderTest::freeUnconsumedFrames()
+/* Frees decoded frames still queued (same as the audio decoder test cleanupAudioDecoder()).
+ * Output frames are owned by the client, and destroyPool() fails while any allocation is outstanding
+ * (IAVBuffer.destroyPool), so leftovers must be freed before the pool is destroyed.
+ * After validation every frame is output before onEndOfStream(), so none is expected: assertOnLeftover=true
+ * reports one as a failure. At teardown, leftovers are expected after an earlier (already reported) failure,
+ * e.g. the sink stopped early: assertOnLeftover=false only logs a warning. */
+void videoDecoderTest::cleanupVideoDecoder(bool assertOnLeftover)
 {
     DecodedVideoFrame_t decodedFrame;
     int32_t freedFrameCount = 0;
@@ -900,11 +874,23 @@ void videoDecoderTest::freeUnconsumedFrames()
     {
         if (decodedFrame.frameAVBufferHandle != -1)
         {
-            AVBUFFER_FREE_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle);
-            freedFrameCount++;
+            if (assertOnLeftover)
+            {
+                UT_LOG_ERROR("[DecoderID: %d] Frame (PTS %lld) received after end of stream",
+                             mDecoderId.value, static_cast<long long>(decodedFrame.framePTS));
+                UT_ASSERT_TRUE(false);
+            }
+
+            bool isBufferValid = false;
+            AVBUFFER_ISVALID_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle, isBufferValid);
+            if (isBufferValid)
+            {
+                AVBUFFER_FREE_SUCCESS(mAVBufferManager, decodedFrame.frameAVBufferHandle);
+                freedFrameCount++;
+            }
         }
     }
-    if (freedFrameCount > 0)
+    if (!assertOnLeftover && freedFrameCount > 0)
     {
         UT_LOG_WARNING("[DecoderID: %d] Freed %d decoded frame(s) that were not consumed",
                        mDecoderId.value, freedFrameCount);
@@ -941,7 +927,7 @@ void videoDecoderTest::releaseDecoderSession(bool closeController)
     }
 
     /* The decoder is stopped, so no new frame can arrive: free what nobody consumed before destroyPool() */
-    freeUnconsumedFrames();
+    cleanupVideoDecoder(false);
 
     if (closeController)
     {

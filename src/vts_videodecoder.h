@@ -220,11 +220,6 @@ typedef struct decoder {
     std::vector<CodecCapability> supportedCodecs;
     std::vector<DynamicRange> supportedDynamicRanges;
     std::vector<Colorimetry> supportedColorimetries;
-    // DEPRECATED (rdk-halif-aidl 0.23.0): the HFP no longer declares operational modes and this list is
-    // no longer parsed (always empty). Kept only so modules not yet migrated still compile; read the
-    // mode after start() instead (getCurrentOperationalMode()).
-    // Remove once all modules are migrated.
-    std::vector<OperationalMode> supportedOperationalModes;
     bool supportsSecure;
 }decoder_t;
 
@@ -1312,27 +1307,21 @@ do { \
         UT_ASSERT_EQUAL(status.exceptionCode(), exception) << "Unexpected exception for parseCodecSpecificData"; \
     } while (0)
 
-#define VIDEODECODER_DECODEBUFFER_WITH_METADATA_SUCCESS(controller, frameBufferHandle, frameMetadata) \
+/* decodeResult is false for a refused buffer (queue full, status OK) and when the call failed (status not OK).
+ * The buffer is not freed here: the caller keeps ownership of it and frees it (same as the audio decoder test). */
+#define VIDEODECODER_DECODEBUFFER_WITH_METADATA_SUCCESS(controller, frameBufferHandle, frameMetadata, decodeResult, status) \
     do { \
-        bool decodeResult = false; \
+        (decodeResult) = false; \
         UT_LOG_INFO("Calling decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld])", \
                     static_cast<uint64_t>(frameBufferHandle), static_cast<long long>((frameMetadata).nsPresentationTime)); \
-        Status status = (controller)->decodeBufferWithMetadata((frameBufferHandle), (frameMetadata), &decodeResult); \
+        (status) = (controller)->decodeBufferWithMetadata((frameBufferHandle), (frameMetadata), &(decodeResult)); \
         UT_LOG_INFO("Result decodeBufferWithMetadata(IN:bufferHandle=[0x%016" PRIx64 "], IN:metadata:[pts=%lld]) status=[isOK:%s, exception:%s], result=%s", \
                     static_cast<uint64_t>(frameBufferHandle), static_cast<long long>((frameMetadata).nsPresentationTime), \
                     UT_Control_GetMapString(bool_mapTable, status.isOk()), \
                     UT_Control_GetMapString(statusException_mapTable, status.exceptionCode()), \
-                    decodeResult ? "true" : "false"); \
+                    (decodeResult) ? "true" : "false"); \
         UT_ASSERT_TRUE(status.isOk()) << "decodeBufferWithMetadata failed"; \
         UT_ASSERT_EQUAL(status.exceptionCode(), Status::EX_NONE); \
-        UT_ASSERT_TRUE(decodeResult) << "decodeBufferWithMetadata returned false"; \
-        if(decodeResult == false || status.isOk() == false || status.exceptionCode() != Status::EX_NONE) \
-        { \
-            if(frameBufferHandle != -1) \
-            { \
-                AVBUFFER_FREE_SUCCESS(gAVBufferManager, frameBufferHandle);\
-            } \
-        } \
     } while (0)
 
 #define VIDEODECODER_DECODEBUFFER_WITH_METADATA_FAILURE(controller, framePts, frameBufferHandle, expectedException) \
@@ -1813,8 +1802,7 @@ private:
     void startDecoding();
     void submitFrame(int64_t bufferHandle, const videodecoder::InputBufferMetadata& metadata);
     bool validateDecodedFrame();
-    void cleanupVideoDecoder();
-    void freeUnconsumedFrames();
+    void cleanupVideoDecoder(bool assertOnLeftover);
     // Helpers for validateDecodedFrame(), one per validation concern:
     bool validateFrameLatencyAndBuffer(const DecodedVideoFrame_t& decodedFrame, std::set<int64_t>& receivedPts,
                                         int32_t& totalOnFramesDecoded);
