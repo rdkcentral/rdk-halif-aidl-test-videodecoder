@@ -549,7 +549,7 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getCapabilities_pos)
 /**
  * @brief Test the positive scenario of retrieving properties from VideoDecoder
  *
- * This test verifies the ability of the VideoDecoder to correctly retrieve various properties such as RESOURCE_ID, OPERATIONAL_MODE, SECURE_VIDEO, and METRIC_FRAMES_DECODED. It ensures that the decoder returns the expected property values without any errors.
+ * This test verifies the ability of the VideoDecoder to correctly retrieve various properties such as RESOURCE_ID, SECURE_VIDEO, and METRIC_FRAMES_DECODED. It ensures that the decoder returns the expected property values without any errors.
  *
  * **Test Group ID:** Basic: 01@n
  * **Test Case ID:** 006@n
@@ -564,9 +564,8 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getCapabilities_pos)
  * | :----: | --------- | ---------- |-------------- | ----- |
  * | 01 | Initialize the test environment and iterate over each decoder | decoders = list of decoders | Should be successful | |
  * | 02 | Call getProperty with RESOURCE_ID and check the result | property = RESOURCE_ID, aidl_return = optional | status.isOk() = true, aidl_return.has_value() = true, aidl_return->value->getTag() = intValue | Should Pass |
- * | 03 | Call getProperty with OPERATIONAL_MODE and check the result | property = OPERATIONAL_MODE, aidl_return = optional | status.isOk() = true, aidl_return.has_value() = true, aidl_return->value->getTag() = intValue | Should Pass |
- * | 04 | Call getProperty with SECURE_VIDEO and check the result | property = SECURE_VIDEO, aidl_return = optional | status.isOk() = true, aidl_return.has_value() = true, aidl_return->value->getTag() = intValue | Should Pass |
- * | 05 | Call getProperty with METRIC_FRAMES_DECODED and check the result | property = METRIC_FRAMES_DECODED, aidl_return = optional | status.isOk() = true, aidl_return.has_value() = true, aidl_return->value->getTag() = intValue | Should Pass |
+ * | 03 | Call getProperty with SECURE_VIDEO and check the result | property = SECURE_VIDEO, aidl_return = optional | status.isOk() = true, aidl_return.has_value() = true, aidl_return->value->getTag() = intValue | Should Pass |
+ * | 04 | Call getProperty with METRIC_FRAMES_DECODED and check the result | property = METRIC_FRAMES_DECODED, aidl_return = optional | status.isOk() = true, aidl_return.has_value() = true, aidl_return->value->getTag() = intValue | Should Pass |
  */
 
  UT_ADD_TEST(VTS_L1_VideoDecoder, getProperty_pos)
@@ -707,7 +706,7 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, getProperty_neg) {
  * **Test Procedure:**@n
  * | Variation / Step | Description | Test Data | Expected Result | Notes |
  * | :----: | --------- | ---------- |-------------- | ----- |
- * | 01 | Initialize the propertyKVList with valid properties | propertyKVList initialized with RESOURCE_ID, INPUT_QUEUE_DEPTH, OUTPUT_FRAME_POOL_SIZE, OPERATIONAL_MODE, SECURE_VIDEO, METRIC_FRAMES_DECODED, METRIC_DECODE_ERRORS, METRIC_FRAMES_DROPPED | Properties should be initialized successfully | Should be successful |
+ * | 01 | Initialize the propertyKVList with valid properties | propertyKVList initialized with RESOURCE_ID, INPUT_QUEUE_DEPTH, OUTPUT_FRAME_POOL_SIZE, SECURE_VIDEO, METRIC_FRAMES_DECODED, METRIC_DECODE_ERRORS, METRIC_FRAMES_DROPPED | Properties should be initialized successfully | Should be successful |
  * | 02 | Call getPropertyMulti with the initialized propertyKVList | IN: propertyKVList, OUT: _aidl_return | Status should be OK, _aidl_return should be true | Should Pass |
  * | 03 | Verify each PropertyKVPair in the list has its propertyValue correctly populated | propertyKVList | Each propertyValue should have a value | Should be successful |
  */
@@ -1743,11 +1742,10 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, stop_neg)
  * | Variation / Step | Description | Test Data | Expected Result | Notes |
  * | :----: | --------- | ---------- |-------------- | ----- |
  * | 01 | Ensure the decoder is in the READY state | controller = current controller, currentState = READY | currentState should be READY | Should be successful |
- * | 02 | Set Operational Mode to NON_TUNNELLED | property = OPERATIONAL_MODE, propertyValue = NON_TUNNELLED, result = false | status.isOk() should be true, result should be true | Should Pass |
- * | 03 | Set Low Latency Mode to ON | property = LOW_LATENCY_MODE, propertyValue = ON, result = false | status.isOk() should be true, result should be true | Should Pass |
- * | 04 | Set Decode Error Policy to Conceal Corrupt Frames | property = DECODE_ERROR_POLICY, propertyValue = Conceal Corrupt Frames, result = false | status.isOk() should be true, result should be true | Should Pass |
- * | 05 | Set AV Source to AVUNKNOWN | property = AV_SOURCE, propertyValue = AVUNKNOWN, result = false | status.isOk() should be true, result should be true | Should Pass |
- * | 06 | Set SHA1 Calculation to ON | property = SHA1_CALC, propertyValue = ON, result = false | status.isOk() should be true, result should be true | Should Pass |
+ * | 02 | Set Low Latency Mode to ON | property = LOW_LATENCY_MODE, propertyValue = ON, result = false | status.isOk() should be true, result should be true | Should Pass |
+ * | 03 | Set Decode Error Policy to Conceal Corrupt Frames | property = DECODE_ERROR_POLICY, propertyValue = Conceal Corrupt Frames, result = false | status.isOk() should be true, result should be true | Should Pass |
+ * | 04 | Set AV Source to AVUNKNOWN | property = AV_SOURCE, propertyValue = AVUNKNOWN, result = false | status.isOk() should be true, result should be true | Should Pass |
+ * | 05 | Set SHA1 Calculation to ON | property = SHA1_CALC, propertyValue = ON, result = false | status.isOk() should be true, result should be true | Should Pass |
  */
 
 UT_ADD_TEST(VTS_L1_VideoDecoder, setProperty_pos)
@@ -1847,10 +1845,9 @@ UT_ADD_TEST(VTS_L1_VideoDecoder, setProperty_pos)
  * | Variation / Step | Description | Test Data | Expected Result | Notes |
  * | :----: | --------- | ---------- |-------------- | ----- |
  * | 01 | Check if VideoDecoderController is available for testing | controllers.empty() | Should be false | Should be successful |
- * | 02 | Set Operational Mode to an Unsupported Mode | property = OPERATIONAL_MODE, propertyValue = 999 | result = false, status.isOk() = false | Should Fail |
- * | 03 | Set Property in Invalid State | property = LOW_LATENCY_MODE, propertyValue = 1 | result = false, status.isOk() = false | Should Fail |
- * | 04 | Set Property with Invalid Value Type | property = DECODE_ERROR_POLICY, propertyValue = "invalid" | result = false, status.isOk() = false | Should Fail |
- * | 05 | Set Property with Out-of-Range Value | property = SHA1_CALC, propertyValue = 999 | result = false, status.isOk() = false | Should Fail |
+ * | 02 | Set Property in Invalid State | property = LOW_LATENCY_MODE, propertyValue = 1 | result = false, status.isOk() = false | Should Fail |
+ * | 03 | Set Property with Invalid Value Type | property = DECODE_ERROR_POLICY, propertyValue = "invalid" | result = false, status.isOk() = false | Should Fail |
+ * | 04 | Set Property with Out-of-Range Value | property = SHA1_CALC, propertyValue = 999 | result = false, status.isOk() = false | Should Fail |
  */
 
 UT_ADD_TEST(VTS_L1_VideoDecoder, setProperty_neg)

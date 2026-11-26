@@ -1038,7 +1038,7 @@ do { \
 /**
  * @brief Calls setProperty on an IVideoDecoder instance to set an integer property value.
  * @param[in] videoDecoder The IVideoDecoder instance (not IVideoDecoderController).
- * @param[in] property The Property enum key (must be read-write, e.g., OPERATIONAL_MODE).
+ * @param[in] property The Property enum key (must be read-write, e.g., LOW_LATENCY_MODE).
  * @param[in] value The integer value to set.
  * @param[in] value_desc String description of the value for logging.
  */
