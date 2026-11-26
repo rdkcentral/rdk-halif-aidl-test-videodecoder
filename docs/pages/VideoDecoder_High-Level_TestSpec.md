@@ -41,10 +41,7 @@ This document provides an overview of the testing requirements for the Video Dec
 
 The Video Decoder `HAL` service provides the interfaces for compressed video to be passed to the vendor layer for decoding.  It may be passed secure buffers if it indicates support for secure video processing.
 
-The output of an video decoder can take two routes:
-
-1. **Non-tunnel mode** - Decoded video frames with metadata are sent back to the `RDK` media pipeline.
-2. **Tunnel mode** - Video is passed directly to the vendor layer mixer.
+Decoded video frames with metadata are sent back to the `RDK` media pipeline.
 
 ## Test Stream specifications
 
@@ -119,7 +116,7 @@ The following table outlines the core features validated in the L3 test phase
 
 |#|Testing Feature|Description|
 |-|---------------|-----------|
-|1|Tunnel/Non-Tunnel|Executes the decoder in tunnel mode or in non tunnel mode based on the property OPERATION_MODE set by the user. The test validates metrics, metadata and bufferHandle.|
+|1|Decode|Decodes the test stream and validates metrics, metadata and bufferHandle. The operational mode is selected by the vendor; the test reads it after start() and validates against it.|
 |2|Secure and Non-Secure|Initializes the decoder in secure mode, ensuring all buffer operations occur in secure memory|
 |3|Error Streams|Verifies decoder behavior with error streams. Ensures appropriate events are raised and frame metadata is updated accurately|
 |4|Codecs|Tests the decoder’s ability to decode all supported codec types per its capabilities, using input streams defined in the configuration file.|
@@ -135,102 +132,54 @@ The following table outlines the core features validated in the L3 test phase
 |14| Adaptive Bitrate Streaming | Tests the decoder’s ability to decode Adaptive Bitrate Streams (ABR) with dynamic bitrate changes, as defined in the configuration fileTests the decoder’s ability to decode Adaptive Bitrate Streams (ABR) with dynamic bitrate changes, as defined in the configuration file.|
 |15|Concurrent decoding|Tests multiple decoders simultaneously, if supported, validating decoded outputs and their respective metrics (e.g., frame timing, error rates).|
 
-|#|Test|Tunnel|Secure|Error streams|CODEC|Discontinuity|EOS|Flush|Flush+Rest|Resolutions|HDR Modes|Frame Rates|GOP|Low Latency|Concurrency|
-|-|----|------|------|-------------|----|-------------|---|-----|----------|-----------|---------|-----------|---|-----------|-----------|
-|1|VDecode_Sequential_NonSecure|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|2|VDecode_Sequential_NonSecure_Error|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|3|VDecode_Sequential_NonSecure_CODEC|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|4|VDecode_Sequential_NonSecure_Discontinuity|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|5|VDecode_Sequential_NonSecure_EOS|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|
-|6|VDecode_Sequential_NonSecure_Flush|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|
-|7|VDecode_Sequential_NonSecure_FlushReset|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|
-|8|VDecode_Sequential_NonSecure_Resolutions|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|
-|9|VDecode_Sequential_NonSecure_HDRModes|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|
-|10|VDecode_Sequential_NonSecure_FrameRate|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|
-|11|VDecode_Sequential_NonSecure_GOPStructure|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|
-|12|VDecode_Sequential_NonSecure_LowLatency|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|
-|13|VDecode_Sequential_Secure|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|14|VDecode_Sequential_Secure_Error|✘|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|15|VDecode_Sequential_Secure_CODEC|✘|✔|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|16|VDecode_Sequential_Secure_Discontinuity|✘|✔|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|17|VDecode_Sequential_Secure_EOS|✘|✔|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|
-|18|VDecode_Sequential_Secure_Flush|✘|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|
-|19|VDecode_Sequential_Secure_FlushReset|✘|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|
-|20|VDecode_Sequential_Secure_Resolutions|✘|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|
-|21|VDecode_Sequential_Secure_HDRModes|✘|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|
-|22|VDecode_Sequential_Secure_FrameRate|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|
-|23|VDecode_Sequential_Secure_GOPStructure|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|
-|24|VDecode_Sequential_Secure_LowLatency|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|
-|25|VDecode_Sequential_Tunnel_NonSecure|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|26|VDecode_Sequential_Tunnel_NonSecure_Error|✔|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|27|VDecode_Sequential_Tunnel_NonSecure_CODEC|✔|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|28|VDecode_Sequential_Tunnel_NonSecure_Discontinuity|✔|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|29|VDecode_Sequential_Tunnel_NonSecure_EOS|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|
-|30|VDecode_Sequential_Tunnel_NonSecure_Flush|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|
-|31|VDecode_Sequential_Tunnel_NonSecure_FlushReset|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|
-|32|VDecode_Sequential_Tunnel_NonSecure_Resolutions|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|
-|33|VDecode_Sequential_Tunnel_NonSecure_HDRModes|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|
-|34|VDecode_Sequential_Tunnel_NonSecure_FrameRate|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|
-|35|VDecode_Sequential_Tunnel_NonSecure_GOPStructure|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|
-|36|VDecode_Sequential_Tunnel_NonSecure_LowLatency|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|
-|37|VDecode_Sequential_Tunnel_Secure|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|38|VDecode_Sequential_Tunnel_Secure_Error|✔|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|39|VDecode_Sequential_Tunnel_Secure_CODEC|✔|✔|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|40|VDecode_Sequential_Tunnel_Secure_Discontinuity|✔|✔|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|
-|41|VDecode_Sequential_Tunnel_Secure_EOS|✔|✔|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|
-|42|VDecode_Sequential_Tunnel_Secure_Flush|✔|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|
-|43|VDecode_Sequential_Tunnel_Secure_FlushReset|✔|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|
-|44|VDecode_Sequential_Tunnel_Secure_Resolutions|✔|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|
-|45|VDecode_Sequential_Tunnel_Secure_HDRModes|✔|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|
-|46|VDecode_Sequential_Tunnel_Secure_FrameRate|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|
-|47|VDecode_Sequential_Tunnel_Secure_GOPStructure|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|
-|48|VDecode_Sequential_Tunnel_Secure_LowLatency|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|
-|49|VDecode_Concurrent_NonSecure|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|50|VDecode_Concurrent_NonSecure_Error|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|
-|51|VDecode_Concurrent_NonSecure_CODEC|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|
-|52|VDecode_Concurrent_NonSecure_Discontinuity|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|53|VDecode_Concurrent_NonSecure_EOS|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✔|
-|54|VDecode_Concurrent_NonSecure_Flush|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✔|
-|55|VDecode_Concurrent_NonSecure_FlushReset|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✔|
-|56|VDecode_Concurrent_NonSecure_Resolutions|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|57|VDecode_Concurrent_NonSecure_HDRModes|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✔|
-|58|VDecode_Concurrent_NonSecure_FrameRate|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✔|
-|59|VDecode_Concurrent_NonSecure_GOPStructure|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✔
-|60|VDecode_Concurrent_NonSecure_LowLatency|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✔|
-|61|VDecode_Concurrent_Secure|✘|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|62|VDecode_Concurrent_Secure_Error|✘|✔|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|63|VDecode_Concurrent_Secure_CODEC|✘|✔|✘|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|64|VDecode_Concurrent_Secure_Discontinuity|✘|✔|✘|✘|✔|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|65|VDecode_Concurrent_Secure_EOS|✘|✔|✘|✘|✘|✔|✘|✘|✔|✘|✘|✘|✘|✔|
-|66|VDecode_Concurrent_Secure_Flush|✘|✔|✘|✘|✘|✘|✔|✘|✔|✘|✘|✘|✘|✔|
-|67|VDecode_Concurrent_Secure_FlushReset|✘|✔|✘|✘|✘|✘|✘|✔|✔|✘|✘|✘|✘|✔|
-|68|VDecode_Concurrent_Secure_Resolutions|✘|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|69|VDecode_Concurrent_Secure_HDRModes|✘|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✔|
-|70|VDecode_Concurrent_Secure_FrameRate|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✔|
-|71|VDecode_Concurrent_Secure_GOPStructure|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✔
-|72|VDecode_Concurrent_Secure_LowLatency|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✔|
-|73|VDecode_Concurrent_Tunnel_NonSecure|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|74|VDecode_Concurrent_Tunnel_NonSecure_Error|✔|✘|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|75|VDecode_Concurrent_Tunnel_NonSecure_CODEC|✔|✘|✘|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|76|VDecode_Concurrent_Tunnel_NonSecure_Discontinuity|✔|✘|✘|✘|✔|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|77|VDecode_Concurrent_Tunnel_NonSecure_EOS|✔|✘|✘|✘|✘|✔|✘|✘|✔|✘|✘|✘|✘|✔|
-|78|VDecode_Concurrent_Tunnel_NonSecure_Flush|✔|✘|✘|✘|✘|✘|✔|✘|✔|✘|✘|✘|✘|✔|
-|79|VDecode_Concurrent_Tunnel_NonSecure_FlushReset|✔|✘|✘|✘|✘|✘|✘|✔|✔|✘|✘|✘|✘|✔|
-|80|VDecode_Concurrent_Tunnel_NonSecure_Resolutions|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|81|VDecode_Concurrent_Tunnel_NonSecure_HDRModes|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✔|
-|82|VDecode_Concurrent_Tunnel_NonSecure_FrameRate|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✔|
-|83|VDecode_Concurrent_Tunnel_NonSecure_GOPStructure|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✔
-|84|VDecode_Concurrent_Tunnel_NonSecure_LowLatency|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✔|
-|85|VDecode_Concurrent_Tunnel_Secure|✔|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|86|VDecode_Concurrent_Tunnel_Secure_Error|✔|✔|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|87|VDecode_Concurrent_Tunnel_Secure_CODEC|✔|✔|✘|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|88|VDecode_Concurrent_Tunnel_Secure_Discontinuity|✔|✔|✘|✘|✔|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|89|VDecode_Concurrent_Tunnel_Secure_EOS|✔|✔|✘|✘|✘|✔|✘|✘|✔|✘|✘|✘|✘|✔|
-|90|VDecode_Concurrent_Tunnel_Secure_Flush|✔|✔|✘|✘|✘|✘|✔|✘|✔|✘|✘|✘|✘|✔|
-|91|VDecode_Concurrent_Tunnel_Secure_FlushReset|✔|✔|✘|✘|✘|✘|✘|✔|✔|✘|✘|✘|✘|✔|
-|92|VDecode_Concurrent_Tunnel_Secure_Resolutions|✔|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
-|93|VDecode_Concurrent_Tunnel_Secure_HDRModes|✔|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✔|
-|94|VDecode_Concurrent_Tunnel_Secure_FrameRate|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✔|
-|95|VDecode_Concurrent_Tunnel_Secure_GOPStructure|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✔
-|96|VDecode_Concurrent_Tunnel_Secure_LowLatency|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✔|
+|#|Test|Secure|Error streams|CODEC|Discontinuity|EOS|Flush|Flush+Rest|Resolutions|HDR Modes|Frame Rates|GOP|Low Latency|Concurrency|
+|-|----|------|-------------|----|-------------|---|-----|----------|-----------|---------|-----------|---|-----------|-----------|
+|1|VDecode_Sequential_NonSecure|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
+|2|VDecode_Sequential_NonSecure_Error|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
+|3|VDecode_Sequential_NonSecure_CODEC|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
+|4|VDecode_Sequential_NonSecure_Discontinuity|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|
+|5|VDecode_Sequential_NonSecure_EOS|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|
+|6|VDecode_Sequential_NonSecure_Flush|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|
+|7|VDecode_Sequential_NonSecure_FlushReset|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|
+|8|VDecode_Sequential_NonSecure_Resolutions|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|
+|9|VDecode_Sequential_NonSecure_HDRModes|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|
+|10|VDecode_Sequential_NonSecure_FrameRate|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|
+|11|VDecode_Sequential_NonSecure_GOPStructure|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|
+|12|VDecode_Sequential_NonSecure_LowLatency|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|
+|13|VDecode_Sequential_Secure|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
+|14|VDecode_Sequential_Secure_Error|✔|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
+|15|VDecode_Sequential_Secure_CODEC|✔|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|
+|16|VDecode_Sequential_Secure_Discontinuity|✔|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|
+|17|VDecode_Sequential_Secure_EOS|✔|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|
+|18|VDecode_Sequential_Secure_Flush|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|
+|19|VDecode_Sequential_Secure_FlushReset|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|
+|20|VDecode_Sequential_Secure_Resolutions|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|
+|21|VDecode_Sequential_Secure_HDRModes|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|
+|22|VDecode_Sequential_Secure_FrameRate|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|
+|23|VDecode_Sequential_Secure_GOPStructure|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|
+|24|VDecode_Sequential_Secure_LowLatency|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|
+|25|VDecode_Concurrent_NonSecure|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
+|26|VDecode_Concurrent_NonSecure_Error|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|
+|27|VDecode_Concurrent_NonSecure_CODEC|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|
+|28|VDecode_Concurrent_NonSecure_Discontinuity|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
+|29|VDecode_Concurrent_NonSecure_EOS|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✘|✔|
+|30|VDecode_Concurrent_NonSecure_Flush|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✘|✔|
+|31|VDecode_Concurrent_NonSecure_FlushReset|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✘|✔|
+|32|VDecode_Concurrent_NonSecure_Resolutions|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
+|33|VDecode_Concurrent_NonSecure_HDRModes|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✔|
+|34|VDecode_Concurrent_NonSecure_FrameRate|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✔|
+|35|VDecode_Concurrent_NonSecure_GOPStructure|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✔
+|36|VDecode_Concurrent_NonSecure_LowLatency|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✔|
+|37|VDecode_Concurrent_Secure|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
+|38|VDecode_Concurrent_Secure_Error|✔|✔|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
+|39|VDecode_Concurrent_Secure_CODEC|✔|✘|✔|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
+|40|VDecode_Concurrent_Secure_Discontinuity|✔|✘|✘|✔|✘|✘|✘|✔|✘|✘|✘|✘|✔|
+|41|VDecode_Concurrent_Secure_EOS|✔|✘|✘|✘|✔|✘|✘|✔|✘|✘|✘|✘|✔|
+|42|VDecode_Concurrent_Secure_Flush|✔|✘|✘|✘|✘|✔|✘|✔|✘|✘|✘|✘|✔|
+|43|VDecode_Concurrent_Secure_FlushReset|✔|✘|✘|✘|✘|✘|✔|✔|✘|✘|✘|✘|✔|
+|44|VDecode_Concurrent_Secure_Resolutions|✔|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✘|✔|
+|45|VDecode_Concurrent_Secure_HDRModes|✔|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✘|✔|
+|46|VDecode_Concurrent_Secure_FrameRate|✔|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✘|✔|
+|47|VDecode_Concurrent_Secure_GOPStructure|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✘|✔
+|48|VDecode_Concurrent_Secure_LowLatency|✔|✘|✘|✘|✘|✘|✘|✘|✘|✘|✘|✔|✔|
 
