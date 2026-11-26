@@ -29,6 +29,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 30 #Frame Rate
     frameRateDenominator: 1
@@ -303,6 +308,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: UNKNOWN
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 30 #Frame Rate
     frameRateDenominator: 1
@@ -354,6 +364,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: UNKNOWN
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 30 #Frame Rate
     frameRateDenominator: 1
@@ -406,6 +421,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: UNKNOWN
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 30 #Frame Rate
     frameRateDenominator: 1
@@ -458,6 +478,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: UNKNOWN
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 30 #Frame Rate
     frameRateDenominator: 1
@@ -666,6 +691,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: UNKNOWN
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 30 #Frame Rate
     frameRateDenominator: 1
@@ -718,6 +748,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: UNKNOWN
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 30 #Frame Rate
     frameRateDenominator: 1
@@ -770,6 +805,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: UNKNOWN
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 30 #Frame Rate
     frameRateDenominator: 1
@@ -1110,6 +1150,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -1377,6 +1422,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -1644,6 +1694,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -1913,6 +1968,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1
@@ -2182,6 +2242,11 @@ VideoStreams:
     colorDepth: 8
     pixelFormat: YCBCR420
     dynamic_range: SDR #com.rdk.hal.video.decoder.DynamicRange enum.
+    colorimetry:
+      range: LIMITED
+      matrix: BT709
+      transfer: UNKNOWN
+      primaries: UNKNOWN
     scanType: PROGRESSIVE_FRAME
     frameRateNumerator: 60 #Frame Rate
     frameRateDenominator: 1

@@ -24,8 +24,6 @@
 
 videodecoder:           # Component object begins
   interfaceVersion: current
-  supportedOperationalModes:
-    - NON_TUNNELLED
   IVideoDecoder:                # Resource list
     - 0:                        # Resource object begins
       supportedCodecs:          # Array of codec capabilities
