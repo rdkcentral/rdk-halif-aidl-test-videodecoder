@@ -32,7 +32,7 @@ This document describes the `L3` Low Level Test Specification and Procedure Docu
 
 ## Test Configuration
 
-The test configuration in [vts_l3_test_config.yaml](../../test_configuration/vts_l3_test_config.yaml) manages input and reference streams, control parameters, and validation criteria for sequential and concurrent decoding in non-tunnel, non-secure modes. It integrates with the test framework via `vts_videodecoder_parse_testconfig`, enabling the `DecoderTest` class to execute and validate decoding operations across various codecs (`H.264`, `H.26`5, `VP9`, and `AV1`) and scenarios (e.g., error handling, `GOP` structures, discontinuity, `EOS`, flush, resolutions, `HDR`
+The test configuration in [vts_l3_test_config.yaml](../../test_configuration/vts_l3_test_config.yaml) manages input and reference streams, control parameters, and validation criteria for sequential and concurrent decoding in non-secure mode. It integrates with the test framework via `vts_videodecoder_parse_testconfig`, enabling the `DecoderTest` class to execute and validate decoding operations across various codecs (`H.264`, `H.26`5, `VP9`, and `AV1`) and scenarios (e.g., error handling, `GOP` structures, discontinuity, `EOS`, flush, resolutions, `HDR`
  modes, frame rates, low-latency, adaptive bitrate).
 
 ### Example Test Configuration File
@@ -48,7 +48,7 @@ IVideoDecoderManager:
   input_streams_path: "test_configuration" #Target path where input streams are stored
   reference_streams_path: "test_configuration" #Target path for reference decoded streams
   L3: #Test Level
-    VDecode_Sequential_NonTunnel_NonSecure:
+    VDecode_Sequential_NonSecure:
       Controls:
         delay_between_decode_calls: 5
       Inputs:
@@ -179,8 +179,8 @@ The video decoder test suite validates the functionality of the Video Decoder Ha
 - **Key Methods**:
   - `SetUp()`: Initializes the test environment, parsing `vts_l3_test_config.yaml` via `vts_videodecoder_parse_testconfig` to populate `testConfiguration_t` with stream metadata (e.g., codec, input file, PTS, frame sizes).
   - `TearDown()`: Cleans up resources, such as closing decoder instances and releasing stream buffers.
-  - `runSequentialDecode()`: Executes sequential decoding tests (e.g., `VDecode_Sequential_NonTunnel_NonSecure`), processing one stream at a time using `DecoderTest::decoderThreadFunc`.
-  - `runConcurrentDecode()`: Executes concurrent decoding tests (e.g., `VDecode_Concurrent_NonTunnel_NonSecure`), managing multiple streams using `DecoderTest::decoderThreadFunc`.
+  - `runSequentialDecode()`: Executes sequential decoding tests (e.g., `VDecode_Sequential_NonSecure`), processing one stream at a time using `DecoderTest::decoderThreadFunc`.
+  - `runConcurrentDecode()`: Executes concurrent decoding tests (e.g., `VDecode_Concurrent_NonSecure`), managing multiple streams using `DecoderTest::decoderThreadFunc`.
   - `runSingleProcessTest()`: Runs individual test cases, handling scenarios like error, discontinuity, or EOS with test-specific parameters (e.g., `signal_discontinuity_pts`, `eos_pts`).
   - `isDecoderUsable()`: Checks if the video decoder is available and functional for testing.
 - **Dependencies**: Uses `vts_l3_test_config.yaml` and included files (e.g., `vts_video_h264_streams.yaml`) for configuration, interacts with `DecoderTest` for decoding.
@@ -204,7 +204,7 @@ The video decoder test suite validates the functionality of the Video Decoder Ha
   - `onStart()`: Signals the decoder to begin processing a stream.
   - `onStop()`: Stops the decoder at `stop_start_pts`.
   - `onFlush(pts)`: Triggers a flush at `flush_pts` or `flush_reset_pts`.
-  - `onReset()`: Resets the decoder for tests like `VDecode_Sequential_NonTunnel_NonSecure_FlushReset`.
+  - `onReset()`: Resets the decoder for tests like `VDecode_Sequential_NonSecure_FlushReset`.
 - **Dependencies**: Receives control signals from `DecoderTest::decoderThreadFunc` based on PTS values (e.g., `flush_pts`, `flush_reset_pts`).
 - **Role**: Manages decoder control operations for test scenarios.
 
@@ -233,9 +233,9 @@ classDiagram
     class VTS_L3_VideoDecoder {
         +SetUp()
         +TearDown()
-        +runSequentialDecode(testConfig, secureDecode, tunnelMode, concurrentDecodeConsume)
-        +runConcurrentDecode(testConfig, secureDecode, tunnelMode, concurrentDecodeConsume)
-        +runTest(testName, secureMode, tunnelMode, concurrentMode)
+        +runSequentialDecode(testConfig, secureDecode)
+        +runConcurrentDecode(testConfig, secureDecode)
+        +runTest(testName, secureMode, concurrentMode)
         +isDecoderUsable()
         -mVideoDecoderList
         -mAVBufferManager
@@ -278,9 +278,9 @@ The class overrides `SetUp()` and `TearDown()` from `UTCore` to handle initializ
 |---|----------|----------|-------------|---------|
 | 1 | `SetUp` | None | Initializes the test by parsing the Hardware Feature Profile (HFP), acquiring decoder IDs, capabilities, and registering listeners. Populates `mVideoDecoderList` and initializes buffer services. | `getVideoDecoderIds()`<br>`getVideoDecoder()`<br>`registerEventListener()`<br>`getCapabilities()`<br>`getAVBufferService()` |
 | 2 | `TearDown` | None | Cleans up by unregistering event listeners and clearing `mVideoDecoderList`. | `unregisterEventListener()` |
-| 3 | `runSequentialDecode` | `testConfiguration_t& testConfig`<br>`bool secureDecode`<br>`bool tunnelMode`<br>`bool concurrentDecodeConsume` | Decodes streams sequentially using `DecoderTest` for each supported decoder, validating codec support and heap metrics. | `getHeapMetrics()` |
-| 4 | `runConcurrentDecode` | `testConfiguration_t& testConfig`<br>`bool secureDecode`<br>`bool tunnelMode`<br>`bool concurrentDecodeConsume` | Launches multiple threads to decode streams concurrently using `DecoderTest`, validating frame counts, errors, and heap metrics. | `getHeapMetrics()` |
-| 5 | `runTest` | `char* testName`<br>`bool secureMode`<br>`bool tunnelMode`<br>`bool concurrentMode` | Checks that the requested operational mode and secure-decoding capability are supported. Unsupported tunnelled, non-tunnelled, or secure tests are reported as skipped; otherwise, parses test configurations and invokes `runConcurrentDecode` or `runSequentialDecode` based on `concurrentMode`. | `getSupportedOperationalModes()` |
+| 3 | `runSequentialDecode` | `testConfiguration_t& testConfig`<br>`bool secureDecode`<br>`bool concurrentDecodeConsume` | Decodes streams sequentially using `DecoderTest` for each supported decoder, validating codec support and heap metrics. | `getHeapMetrics()` |
+| 4 | `runConcurrentDecode` | `testConfiguration_t& testConfig`<br>`bool secureDecode`<br>`bool concurrentDecodeConsume` | Launches multiple threads to decode streams concurrently using `DecoderTest`, validating frame counts, errors, and heap metrics. | `getHeapMetrics()` |
+| 5 | `runTest` | `char* testName`<br>`bool secureMode`<br>`bool concurrentMode` | Checks that the secure-decoding capability is supported. Unsupported secure tests are reported as skipped; otherwise, parses test configurations and invokes `runConcurrentDecode` or `runSequentialDecode` based on `concurrentMode`. | None |
 
 ### SetUp
 
@@ -405,9 +405,6 @@ sequenceDiagram
     rundecoder->>rundecoder: parseFrames(inputBuffer, fileSize, codec)
     rundecoder->>VideoDecoder_HAL: open(codec, secureDecode, controlListener)
     VideoDecoder_HAL-->>rundecoder: videoDecoderController
-    alt Tunnel mode
-      rundecoder->>VideoDecoder_HAL: setProperty(OPERATIONAL_MODE, TUNNELLED)
-    end
     rundecoder->>VideoDecoder_HAL: start()
     rundecoder->>rundecoder: getDecoderMetrics()
     loop For each frame in frameData
@@ -658,109 +655,72 @@ This validation ensures that metadata for each decoded frame matches the expecte
 
 ## L3 Tests
 
-`Currently, the L3 test suite for the video decoder is limited to testing H.264, HEVC, and VP9 codecs in Non-Tunnel and Non-Secure modes, exclusively with HD stream`
+`Currently, the L3 test suite for the video decoder is limited to testing H.264, HEVC, and VP9 codecs in Non-Secure mode, exclusively with HD stream`
 
 ## Test Case Table
 
 | #   | Test Name                                           | Function                | Arguments                                      | Test Configuration Controls                        |
 |-----|----------------------------------------------------|-------------------------|-----------------------------------------------|--------------------------------------------------|
-| 1   | VDecode_Sequential_NonTunnel_NonSecure              | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams                                   |
-| 2   | VDecode_Sequential_NonTunnel_NonSecure_Error        | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.error_streams         |
-| 3   | VDecode_Sequential_NonTunnel_NonSecure_GOP          | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.gop_structure         |
-| 4   | VDecode_Sequential_NonTunnel_NonSecure_Discontinuity| runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.signal_discontinuity_pts |
-| 5   | VDecode_Sequential_NonTunnel_NonSecure_EOS         | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.eos_pts               |
-| 6   | VDecode_Sequential_NonTunnel_NonSecure_Flush        | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.flush_pts             |
-| 7   | VDecode_Sequential_NonTunnel_NonSecure_FlushReset   | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.flush_reset_pts       |
-| 8   | VDecode_Concurrent_NonTunnel_NonSecure             | runConcurrentDecode     | secureMode = false<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams                                   |
-| 12  | Decode_NonTunnel_NonSecure_Error_Discontinuity    | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.error_streams<br>Controls.signal_discontinuity_pts |
-| 13  | Decode_NonTunnel_NonSecure_Error_EOS              | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.error_streams<br>Controls.eos_pts |
-| 14  | Decode_NonTunnel_NonSecure_Discontinuity_EOS      | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.signal_discontinuity_pts<br>Controls.eos_pts |
-| 15  | Decode_NonTunnel_NonSecure_Flush_Error            | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.flush_pts<br>Controls.error_streams |
-| 16  | Decode_NonTunnel_NonSecure_FlushReset_Error       | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.flush_reset_pts<br>Controls.error_streams |
-| 18  | VDecode_Concurrent_NonTunnel_NonSecure_Error       | runConcurrentDecode     | secureMode = false<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.error_streams         |
-| 19  | VDecode_Concurrent_NonTunnel_NonSecure_Discontinuity| runConcurrentDecode    | secureMode = false<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.signal_discontinuity_pts |
-| 20  | VDecode_Concurrent_NonTunnel_NonSecure_EOS         | runConcurrentDecode     | secureMode = false<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.eos_pts               |
-| 21  | VDecode_Concurrent_NonTunnel_NonSecure_Flush       | runConcurrentDecode     | secureMode = false<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.flush_pts             |
-| 22  | VDecode_Concurrent_NonTunnel_NonSecure_FlushReset  | runConcurrentDecode     | secureMode = false<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.flush_reset_pts       |
-| 23  | VDecode_Sequential_NonTunnel_NonSecure_CODEC       | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.codec                 |
-| 24  | VDecode_Sequential_NonTunnel_NonSecure_Resolutions | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.resolution            |
-| 25  | VDecode_Sequential_NonTunnel_NonSecure_HDRModes    | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.dynamicRange          |
-| 26  | VDecode_Sequential_NonTunnel_NonSecure_FrameRate   | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.frameRate             |
-| 27  | VDecode_Sequential_NonTunnel_NonSecure_LowLatency  | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.lowLatency            |
-| 28  | VDecode_Sequential_NonTunnel_NonSecure_AdaptiveBitrate | runSingleProcessTest | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.adaptiveBitrate       |
-| 29  | VDecode_Sequential_NonTunnel_Secure_CODEC          | runSingleProcessTest    | secureMode = true<br>tunnelMode = false<br>concurrentMode = false  | Inputs.Streams<br>Controls.codec                 |
-| 30  | VDecode_Sequential_NonTunnel_Secure_Discontinuity  | runSingleProcessTest    | secureMode = true<br>tunnelMode = false<br>concurrentMode = false  | Inputs.Streams<br>Controls.signal_discontinuity_pts |
-| 31  | VDecode_Sequential_NonTunnel_Secure_EOS            | runSingleProcessTest    | secureMode = true<br>tunnelMode = false<br>concurrentMode = false  | Inputs.Streams<br>Controls.eos_pts               |
-| 32  | VDecode_Sequential_NonTunnel_Secure_Flush          | runSingleProcessTest    | secureMode = true<br>tunnelMode = false<br>concurrentMode = false  | Inputs.Streams<br>Controls.flush_pts             |
-| 33  | VDecode_Sequential_NonTunnel_Secure_FlushReset     | runSingleProcessTest    | secureMode = true<br>tunnelMode = false<br>concurrentMode = false  | Inputs.Streams<br>Controls.flush_reset_pts       |
-| 34  | VDecode_Sequential_NonTunnel_Secure_Resolutions    | runSingleProcessTest    | secureMode = true<br>tunnelMode = false<br>concurrentMode = false  | Inputs.Streams<br>Controls.resolution            |
-| 35  | VDecode_Sequential_NonTunnel_Secure_HDRModes       | runSingleProcessTest    | secureMode = true<br>tunnelMode = false<br>concurrentMode = false  | Inputs.Streams<br>Controls.dynamicRange          |
-| 36  | VDecode_Sequential_NonTunnel_Secure_FrameRate      | runSingleProcessTest    | secureMode = true<br>tunnelMode = false<br>concurrentMode = false  | Inputs.Streams<br>Controls.frameRate             |
-| 37  | VDecode_Sequential_NonTunnel_Secure_LowLatency     | runSingleProcessTest    | secureMode = true<br>tunnelMode = false<br>concurrentMode = false  | Inputs.Streams<br>Controls.lowLatency            |
-| 38  | VDecode_Concurrent_NonTunnel_NonSecure_CODEC       | runConcurrentDecode     | secureMode = false<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.codec                 |
-| 39  | VDecode_Concurrent_NonTunnel_NonSecure_Resolutions | runConcurrentDecode     | secureMode = false<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.resolution            |
-| 40  | VDecode_Concurrent_NonTunnel_NonSecure_HDRModes    | runConcurrentDecode     | secureMode = false<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.dynamicRange          |
-| 41  | VDecode_Concurrent_NonTunnel_NonSecure_FrameRate   | runConcurrentDecode     | secureMode = false<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.frameRate             |
-| 42  | VDecode_Concurrent_NonTunnel_NonSecure_GOPStructure| runConcurrentDecode     | secureMode = false<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.gop_structure         |
-| 43  | VDecode_Concurrent_NonTunnel_NonSecure_LowLatency  | runConcurrentDecode     | secureMode = false<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.lowLatency            |
-| 44  | VDecode_Concurrent_NonTunnel_Secure_Error          | runConcurrentDecode     | secureMode = true<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.error_streams         |
-| 45  | VDecode_Concurrent_NonTunnel_Secure_CODEC          | runConcurrentDecode     | secureMode = true<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.codec                 |
-| 46  | VDecode_Concurrent_NonTunnel_Secure_Discontinuity  | runConcurrentDecode     | secureMode = true<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.signal_discontinuity_pts |
-| 47  | VDecode_Concurrent_NonTunnel_Secure_EOS            | runConcurrentDecode     | secureMode = true<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.eos_pts               |
-| 48  | VDecode_Concurrent_NonTunnel_Secure_Flush          | runConcurrentDecode     | secureMode = true<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.flush_pts             |
-| 49  | VDecode_Concurrent_NonTunnel_Secure_FlushReset     | runConcurrentDecode     | secureMode = true<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.flush_reset_pts       |
-| 50  | VDecode_Concurrent_NonTunnel_Secure_Resolutions    | runConcurrentDecode     | secureMode = true<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.resolution            |
-| 51  | VDecode_Concurrent_NonTunnel_Secure_HDRModes       | runConcurrentDecode     | secureMode = true<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.dynamicRange          |
-| 52  | VDecode_Concurrent_NonTunnel_Secure_FrameRate      | runConcurrentDecode     | secureMode = true<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.frameRate             |
-| 53  | VDecode_Concurrent_NonTunnel_Secure_GOPStructure   | runConcurrentDecode     | secureMode = true<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.gop_structure         |
-| 54  | VDecode_Concurrent_NonTunnel_Secure_LowLatency     | runConcurrentDecode     | secureMode = true<br>tunnelMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.lowLatency            |
-| 55  | Decode_Tunnel_NonSecure                          | runSingleProcessTest    | secureMode = false<br>tunnelMode = true<br>concurrentMode = false  | Inputs.Streams                                   |
-| 56  | Decode_Tunnel_Secure                             | runSingleProcessTest    | secureMode = true<br>tunnelMode = true<br>concurrentMode = false   | Inputs.Streams                                   |
-| 57  | Decode_Tunnel_NonSecure_Error                    | runSingleProcessTest    | secureMode = false<br>tunnelMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.error_streams         |
-| 58  | VDecode_Concurrent_Tunnel_NonSecure               | runConcurrentDecode     | secureMode = false<br>tunnelMode = true<br>concurrentMode = true   | Inputs.Streams                                   |
-| 59  | VDecode_Sequential_Tunnel_NonSecure_CODEC         | runSingleProcessTest    | secureMode = false<br>tunnelMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.codec                 |
-| 60  | VDecode_Sequential_Tunnel_NonSecure_Discontinuity | runSingleProcessTest    | secureMode = false<br>tunnelMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.signal_discontinuity_pts |
-| 61  | VDecode_Sequential_Tunnel_NonSecure_EOS           | runSingleProcessTest    | secureMode = false<br>tunnelMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.eos_pts               |
-| 62  | VDecode_Sequential_Tunnel_NonSecure_Flush         | runSingleProcessTest    | secureMode = false<br>tunnelMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.flush_pts             |
-| 63  | VDecode_Sequential_Tunnel_NonSecure_FlushReset    | runSingleProcessTest    | secureMode = false<br>tunnelMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.flush_reset_pts       |
-| 64  | VDecode_Sequential_Tunnel_NonSecure_Resolutions   | runSingleProcessTest    | secureMode = false<br>tunnelMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.resolution            |
-| 65  | VDecode_Sequential_Tunnel_NonSecure_HDRModes      | runSingleProcessTest    | secureMode = false<br>tunnelMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.dynamicRange          |
-| 66  | VDecode_Sequential_Tunnel_NonSecure_FrameRate     | runSingleProcessTest    | secureMode = false<br>tunnelMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.frameRate             |
-| 67  | VDecode_Sequential_Tunnel_NonSecure_GOPStructure  | runSingleProcessTest    | secureMode = false<br>tunnelMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.gop_structure         |
-| 68  | VDecode_Sequential_Tunnel_NonSecure_LowLatency    | runSingleProcessTest    | secureMode = false<br>tunnelMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.lowLatency            |
-| 69  | VDecode_Sequential_Tunnel_Secure_Error            | runSingleProcessTest    | secureMode = true<br>tunnelMode = true<br>concurrentMode = false   | Inputs.Streams<br>Controls.error_streams         |
-| 70  | VDecode_Sequential_Tunnel_Secure_CODEC            | runSingleProcessTest    | secureMode = true<br>tunnelMode = true<br>concurrentMode = false   | Inputs.Streams<br>Controls.codec                 |
-| 71  | VDecode_Sequential_Tunnel_Secure_Discontinuity    | runSingleProcessTest    | secureMode = true<br>tunnelMode = true<br>concurrentMode = false   | Inputs.Streams<br>Controls.signal_discontinuity_pts |
-| 72  | VDecode_Sequential_Tunnel_Secure_EOS              | runSingleProcessTest    | secureMode = true<br>tunnelMode = true<br>concurrentMode = false   | Inputs.Streams<br>Controls.eos_pts               |
-| 73  | VDecode_Sequential_Tunnel_Secure_Flush            | runSingleProcessTest    | secureMode = true<br>tunnelMode = true<br>concurrentMode = false   | Inputs.Streams<br>Controls.flush_pts             |
-| 74  | VDecode_Sequential_Tunnel_Secure_FlushReset       | runSingleProcessTest    | secureMode = true<br>tunnelMode = true<br>concurrentMode = false   | Inputs.Streams<br>Controls.flush_reset_pts       |
-| 75  | VDecode_Sequential_Tunnel_Secure_Resolutions      | runSingleProcessTest    | secureMode = true<br>tunnelMode = true<br>concurrentMode = false   | Inputs.Streams<br>Controls.resolution            |
-| 76  | VDecode_Sequential_Tunnel_Secure_HDRModes         | runSingleProcessTest    | secureMode = true<br>tunnelMode = true<br>concurrentMode = false   | Inputs.Streams<br>Controls.dynamicRange          |
-| 77  | VDecode_Sequential_Tunnel_Secure_FrameRate        | runSingleProcessTest    | secureMode = true<br>tunnelMode = true<br>concurrentMode = false   | Inputs.Streams<br>Controls.frameRate             |
-| 78  | VDecode_Sequential_Tunnel_Secure_GOPStructure     | runSingleProcessTest    | secureMode = true<br>tunnelMode = true<br>concurrentMode = false   | Inputs.Streams<br>Controls.gop_structure         |
-| 79  | VDecode_Sequential_Tunnel_Secure_LowLatency       | runSingleProcessTest    | secureMode = true<br>tunnelMode = true<br>concurrentMode = false   | Inputs.Streams<br>Controls.lowLatency            |
-| 80  | VDecode_Concurrent_Tunnel_NonSecure_Error         | runConcurrentDecode     | secureMode = false<br>tunnelMode = true<br>concurrentMode = true   | Inputs.Streams<br>Controls.error_streams         |
-| 81  | VDecode_Concurrent_Tunnel_NonSecure_CODEC         | runConcurrentDecode     | secureMode = false<br>tunnelMode = true<br>concurrentMode = true   | Inputs.Streams<br>Controls.codec                 |
-| 82  | VDecode_Concurrent_Tunnel_NonSecure_Discontinuity | runConcurrentDecode     | secureMode = false<br>tunnelMode = true<br>concurrentMode = true   | Inputs.Streams<br>Controls.signal_discontinuity_pts |
-| 83  | VDecode_Concurrent_Tunnel_NonSecure_EOS           | runConcurrentDecode     | secureMode = false<br>tunnelMode = true<br>concurrentMode = true   | Inputs.Streams<br>Controls.eos_pts               |
-| 84  | VDecode_Concurrent_Tunnel_NonSecure_Flush         | runConcurrentDecode     | secureMode = false<br>tunnelMode = true<br>concurrentMode = true   | Inputs.Streams<br>Controls.flush_pts             |
-| 85  | VDecode_Concurrent_Tunnel_NonSecure_FlushReset    | runConcurrentDecode     | secureMode = false<br>tunnelMode = true<br>concurrentMode = true   | Inputs.Streams<br>Controls.flush_reset_pts       |
-| 86  | VDecode_Concurrent_Tunnel_NonSecure_Resolutions   | runConcurrentDecode     | secureMode = false<br>tunnelMode = true<br>concurrentMode = true   | Inputs.Streams<br>Controls.resolution            |
-| 87  | VDecode_Concurrent_Tunnel_NonSecure_HDRModes      | runConcurrentDecode     | secureMode = false<br>tunnelMode = true<br>concurrentMode = true   | Inputs.Streams<br>Controls.dynamicRange          |
-| 88  | VDecode_Concurrent_Tunnel_NonSecure_FrameRate     | runConcurrentDecode     | secureMode = false<br>tunnelMode = true<br>concurrentMode = true   | Inputs.Streams<br>Controls.frameRate             |
-| 89  | VDecode_Concurrent_Tunnel_NonSecure_GOPStructure  | runConcurrentDecode     | secureMode = false<br>tunnelMode = true<br>concurrentMode = true   | Inputs.Streams<br>Controls.gop_structure         |
-| 90  | VDecode_Concurrent_Tunnel_NonSecure_LowLatency    | runConcurrentDecode     | secureMode = false<br>tunnelMode = true<br>concurrentMode = true   | Inputs.Streams<br>Controls.lowLatency            |
-| 91  | VDecode_Concurrent_Tunnel_Secure                  | runConcurrentDecode     | secureMode = true<br>tunnelMode = true<br>concurrentMode = true    | Inputs.Streams                                   |
-| 92  | VDecode_Sequential_NonTunnel_NonSecure_Clrmty                  | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.setColorimetry        |
-| 93  | VDecode_Sequential_NonTunnel_NonSecure_ClrmtyNoSet             | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams                                   |
-| 94  | VDecode_Sequential_NonTunnel_NonSecure_MstrDisplay             | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.setMasteringDisplayInfo |
-| 95  | VDecode_Sequential_NonTunnel_NonSecure_MstrDisplayNoSet        | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams                                   |
-| 96  | VDecode_Sequential_NonTunnel_NonSecure_CntntLight              | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.setContentLightLevel  |
-| 97  | VDecode_Sequential_NonTunnel_NonSecure_CntntLightNoSet         | runSingleProcessTest    | secureMode = false<br>tunnelMode = false<br>concurrentMode = false | Inputs.Streams                                   |
+| 1   | VDecode_Sequential_NonSecure              | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams                                   |
+| 2   | VDecode_Sequential_NonSecure_Error        | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.error_streams         |
+| 3   | VDecode_Sequential_NonSecure_GOP          | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.gop_structure         |
+| 4   | VDecode_Sequential_NonSecure_Discontinuity| runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.signal_discontinuity_pts |
+| 5   | VDecode_Sequential_NonSecure_EOS         | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.eos_pts               |
+| 6   | VDecode_Sequential_NonSecure_Flush        | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.flush_pts             |
+| 7   | VDecode_Sequential_NonSecure_FlushReset   | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.flush_reset_pts       |
+| 8   | VDecode_Concurrent_NonSecure             | runConcurrentDecode     | secureMode = false<br>concurrentMode = true  | Inputs.Streams                                   |
+| 12  | Decode_NonSecure_Error_Discontinuity    | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.error_streams<br>Controls.signal_discontinuity_pts |
+| 13  | Decode_NonSecure_Error_EOS              | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.error_streams<br>Controls.eos_pts |
+| 14  | Decode_NonSecure_Discontinuity_EOS      | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.signal_discontinuity_pts<br>Controls.eos_pts |
+| 15  | Decode_NonSecure_Flush_Error            | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.flush_pts<br>Controls.error_streams |
+| 16  | Decode_NonSecure_FlushReset_Error       | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.flush_reset_pts<br>Controls.error_streams |
+| 18  | VDecode_Concurrent_NonSecure_Error       | runConcurrentDecode     | secureMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.error_streams         |
+| 19  | VDecode_Concurrent_NonSecure_Discontinuity| runConcurrentDecode    | secureMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.signal_discontinuity_pts |
+| 20  | VDecode_Concurrent_NonSecure_EOS         | runConcurrentDecode     | secureMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.eos_pts               |
+| 21  | VDecode_Concurrent_NonSecure_Flush       | runConcurrentDecode     | secureMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.flush_pts             |
+| 22  | VDecode_Concurrent_NonSecure_FlushReset  | runConcurrentDecode     | secureMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.flush_reset_pts       |
+| 23  | VDecode_Sequential_NonSecure_CODEC       | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.codec                 |
+| 24  | VDecode_Sequential_NonSecure_Resolutions | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.resolution            |
+| 25  | VDecode_Sequential_NonSecure_HDRModes    | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.dynamicRange          |
+| 26  | VDecode_Sequential_NonSecure_FrameRate   | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.frameRate             |
+| 27  | VDecode_Sequential_NonSecure_LowLatency  | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.lowLatency            |
+| 28  | VDecode_Sequential_NonSecure_AdaptiveBitrate | runSingleProcessTest | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.adaptiveBitrate       |
+| 29  | VDecode_Sequential_Secure_CODEC          | runSingleProcessTest    | secureMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.codec                 |
+| 30  | VDecode_Sequential_Secure_Discontinuity  | runSingleProcessTest    | secureMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.signal_discontinuity_pts |
+| 31  | VDecode_Sequential_Secure_EOS            | runSingleProcessTest    | secureMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.eos_pts               |
+| 32  | VDecode_Sequential_Secure_Flush          | runSingleProcessTest    | secureMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.flush_pts             |
+| 33  | VDecode_Sequential_Secure_FlushReset     | runSingleProcessTest    | secureMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.flush_reset_pts       |
+| 34  | VDecode_Sequential_Secure_Resolutions    | runSingleProcessTest    | secureMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.resolution            |
+| 35  | VDecode_Sequential_Secure_HDRModes       | runSingleProcessTest    | secureMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.dynamicRange          |
+| 36  | VDecode_Sequential_Secure_FrameRate      | runSingleProcessTest    | secureMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.frameRate             |
+| 37  | VDecode_Sequential_Secure_LowLatency     | runSingleProcessTest    | secureMode = true<br>concurrentMode = false  | Inputs.Streams<br>Controls.lowLatency            |
+| 38  | VDecode_Concurrent_NonSecure_CODEC       | runConcurrentDecode     | secureMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.codec                 |
+| 39  | VDecode_Concurrent_NonSecure_Resolutions | runConcurrentDecode     | secureMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.resolution            |
+| 40  | VDecode_Concurrent_NonSecure_HDRModes    | runConcurrentDecode     | secureMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.dynamicRange          |
+| 41  | VDecode_Concurrent_NonSecure_FrameRate   | runConcurrentDecode     | secureMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.frameRate             |
+| 42  | VDecode_Concurrent_NonSecure_GOPStructure| runConcurrentDecode     | secureMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.gop_structure         |
+| 43  | VDecode_Concurrent_NonSecure_LowLatency  | runConcurrentDecode     | secureMode = false<br>concurrentMode = true  | Inputs.Streams<br>Controls.lowLatency            |
+| 44  | VDecode_Concurrent_Secure_Error          | runConcurrentDecode     | secureMode = true<br>concurrentMode = true  | Inputs.Streams<br>Controls.error_streams         |
+| 45  | VDecode_Concurrent_Secure_CODEC          | runConcurrentDecode     | secureMode = true<br>concurrentMode = true  | Inputs.Streams<br>Controls.codec                 |
+| 46  | VDecode_Concurrent_Secure_Discontinuity  | runConcurrentDecode     | secureMode = true<br>concurrentMode = true  | Inputs.Streams<br>Controls.signal_discontinuity_pts |
+| 47  | VDecode_Concurrent_Secure_EOS            | runConcurrentDecode     | secureMode = true<br>concurrentMode = true  | Inputs.Streams<br>Controls.eos_pts               |
+| 48  | VDecode_Concurrent_Secure_Flush          | runConcurrentDecode     | secureMode = true<br>concurrentMode = true  | Inputs.Streams<br>Controls.flush_pts             |
+| 49  | VDecode_Concurrent_Secure_FlushReset     | runConcurrentDecode     | secureMode = true<br>concurrentMode = true  | Inputs.Streams<br>Controls.flush_reset_pts       |
+| 50  | VDecode_Concurrent_Secure_Resolutions    | runConcurrentDecode     | secureMode = true<br>concurrentMode = true  | Inputs.Streams<br>Controls.resolution            |
+| 51  | VDecode_Concurrent_Secure_HDRModes       | runConcurrentDecode     | secureMode = true<br>concurrentMode = true  | Inputs.Streams<br>Controls.dynamicRange          |
+| 52  | VDecode_Concurrent_Secure_FrameRate      | runConcurrentDecode     | secureMode = true<br>concurrentMode = true  | Inputs.Streams<br>Controls.frameRate             |
+| 53  | VDecode_Concurrent_Secure_GOPStructure   | runConcurrentDecode     | secureMode = true<br>concurrentMode = true  | Inputs.Streams<br>Controls.gop_structure         |
+| 54  | VDecode_Concurrent_Secure_LowLatency     | runConcurrentDecode     | secureMode = true<br>concurrentMode = true  | Inputs.Streams<br>Controls.lowLatency            |
+| 55  | VDecode_Sequential_NonSecure_Clrmty                  | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.setColorimetry        |
+| 56  | VDecode_Sequential_NonSecure_ClrmtyNoSet             | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams                                   |
+| 57  | VDecode_Sequential_NonSecure_MstrDisplay             | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.setMasteringDisplayInfo |
+| 58  | VDecode_Sequential_NonSecure_MstrDisplayNoSet        | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams                                   |
+| 59  | VDecode_Sequential_NonSecure_CntntLight              | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams<br>Controls.setContentLightLevel  |
+| 60  | VDecode_Sequential_NonSecure_CntntLightNoSet         | runSingleProcessTest    | secureMode = false<br>concurrentMode = false | Inputs.Streams                                   |
 
 
 - **Test Execution**:
-  - Each test case calls `runTest(testName, secureMode, tunnelMode, concurrentMode)`, which initializes a `DecoderTest` instance and invokes its `run` method.
+  - Each test case calls `runTest(testName, secureMode, concurrentMode)`, which initializes a `DecoderTest` instance and invokes its `run` method.
   - Sequential tests (`concurrentMode = false`) use `DecoderTest::decodeAndConsumeVideoStreams` for frame-by-frame decoding and consumption.
   - Concurrent tests (`concurrentMode = true`) use `DecoderTest::decoderThreadFunc` for decoding, with `consumerThreadFunc` commented out in the provided implementation.
 - **Validation**:
@@ -785,7 +745,6 @@ This validation ensures that metadata for each decoded frame matches the expecte
 - **HAL APIs** (via AIDL interfaces):
   - `createVideoPool`, `alloc`, `free`, `destroyPool` (buffer management).
   - `open`, `start`, `decodeBuffer`, `stop`, `close` (decoder control).
-  - `setProperty` (e.g., `OPERATIONAL_MODE` for tunnel mode).
   - `getProperty` (e.g., for metrics).
   - `getNextFrame` (via `VideoDecoderControllerListener` for output frames).
   - `getErrors` (via `VideoDecoderEventListener` for error validation).
@@ -801,8 +760,8 @@ This validation ensures that metadata for each decoded frame matches the expecte
 ## Notes
 
 - **Commented-Out Tests**:
-  - Tests 009–011 and 017 (`Decode_NonTunnel_Secure`, `Decode_NonTunnel_Secure_Error`, `Decode_NonTunnel_Secure_GOP`, `VDecode_Concurrent_NonTunnel_Secure`) are disabled (`#if 0`). Excluded from the table but can be included if confirmed as active.
-  - Test 054 (`VDecode_Concurrent_NonTunnel_Secure_LowLatency`) appears twice in the provided list; the second instance is likely a duplicate and is included only once in the table.
+  - Tests 009–011 and 017 (`Decode_Secure`, `Decode_Secure_Error`, `Decode_Secure_GOP`, `VDecode_Concurrent_Secure`) are disabled (`#if 0`). Excluded from the table but can be included if confirmed as active.
+  - Test 054 (`VDecode_Concurrent_Secure_LowLatency`) appears twice in the provided list; the second instance is likely a duplicate and is included only once in the table.
 - **Function Mapping**:
   - `runSingleProcessTest`: Assumed to handle sequential decoding (`concurrentMode = false`), calling `DecoderTest::decodeAndConsumeVideoStreams`.
   - `runConcurrentDecode`: Assumed to handle concurrent decoding (`concurrentMode = true`), calling `DecoderTest::decoderThreadFunc`.
@@ -824,7 +783,7 @@ This validation ensures that metadata for each decoded frame matches the expecte
     participant V as VTS_L3_VideoDecoder
     participant D as DecoderTest
     participant H as VideoDecoder HAL
-    V->>D: runTest(testName, secureMode, tunnelMode, concurrentMode)
+    V->>D: runTest(testName, secureMode, concurrentMode)
     alt concurrentMode = true
       D->>D: decoderThreadFunc()
     else

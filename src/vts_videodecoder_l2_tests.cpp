@@ -103,7 +103,6 @@ std::vector<PropertyTestCase> testCases_startedState = {
 class VTS_L2_VideoDecoder : public UTCore {
     public:
         std::vector<std::tuple<sp<IVideoDecoder>, sp<VideoDecoderControllerListener>, sp<VideoDecoderEventListener>,videodecoder::Capabilities *>> mVideoDecoderList;
-        std::vector<videodecoder::OperationalMode> supportedModes;
         /**
          * @brief Default constructor.
          * Relies on UTCore's default initialization; no additional setup required.
@@ -129,17 +128,6 @@ class VTS_L2_VideoDecoder : public UTCore {
             std::vector<IVideoDecoder::Id> decoderIds;
         /* Get the Video Sink IDs */
             VIDEODECODER_MANAGER_GETVIDEODECODERIDS(decoderIds);
-
-            /*Get Supported Operationl Modes*/
-            VIDEODECODER_MANAGER_GETSUPPORTEDOPERATIONALMODES(supportedModes);
-
-            /* Operational modes setting*/
-            for (const auto& _supportedModes : supportedModes)
-            {
-                   PropertyTestCase operational_mode = {::com::rdk::hal::videodecoder::Property::OPERATIONAL_MODE, static_cast<int32_t>(_supportedModes), "OPERATIONAL_MODE"};
-                   testCases_readyState.push_back(operational_mode);
-                   testCases_startedState.push_back(operational_mode);
-            }
 
             android::ProcessState::self()->startThreadPool();
 
@@ -284,11 +272,6 @@ UT_ADD_TEST(VTS_L2_VideoDecoder, TestGetAndSetProperties_multipleInstance)
     {
         const auto& [videoDecoder,controlListener,eventListener,capabilities] = mVideoDecoderList[i];
         const auto& controller = videoDecoderControllersList[i];
-
-        std::vector<videodecoder::OperationalMode> supportedModes;
-
-        /*Get Supported Operationl Modes*/
-        VIDEODECODER_MANAGER_GETSUPPORTEDOPERATIONALMODES(supportedModes);
 
         for (const auto& testCase : testCases_readyState)
         {
